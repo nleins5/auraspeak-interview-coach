@@ -233,8 +233,7 @@ export default function VoiceCoach() {
               formData.append('language', 'vi');
               formData.append('client_duration', recordingTime.toString());
               
-              const apiBase = import.meta.env.VITE_API_BASE || '';
-              const response = await fetch(`${apiBase}/v1/audio/transcriptions`, {
+              const response = await fetch('/v1/audio/transcriptions', {
                 method: 'POST',
                 body: formData
               });
@@ -312,7 +311,6 @@ export default function VoiceCoach() {
     setStatusMsg('Đang gửi dữ liệu đến AI Coach để chấm điểm STAR...');
 
     try {
-      const baseUrl = import.meta.env.VITE_ROUTER_AI_URL || 'http://localhost:8000';
       const headers = {
         'Content-Type': 'application/json',
       };
@@ -322,7 +320,7 @@ export default function VoiceCoach() {
       }
 
       const response = await fetch(
-        `${baseUrl}/v1/chat/interview`,
+        '/v1/chat/interview',
         {
           method: 'POST',
           headers: headers,
@@ -359,13 +357,7 @@ export default function VoiceCoach() {
       return;
     }
     
-    const routerUrl = import.meta.env.VITE_ROUTER_AI_URL;
-    if (geminiKey.trim() || routerUrl) {
-      analyzeWithGemini(textToAnalyze);
-    } else {
-      setStatusMsg('Bạn cần điền Google Gemini API Key hoặc cấu hình Router URL để chấm điểm. Đang chuyển hướng sang trang Cài đặt...');
-      setActiveView('settings');
-    }
+    analyzeWithGemini(textToAnalyze);
   };
 
   return (

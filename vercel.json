@@ -11,7 +11,7 @@
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "Permissions-Policy", "value": "microphone=(*)" }
+        { "key": "Permissions-Policy", "value": "microphone=(self), camera=(self)" }
       ]
     }
   ],
