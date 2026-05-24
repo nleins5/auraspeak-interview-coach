@@ -200,26 +200,14 @@ export default function VoiceCoach() {
     
     if (sttProvider === 'browser' && recognitionRef.current) {
       try {
-        // Pre-emptive microphone permission request to trigger OS/Browser prompt reliably
-        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-          const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          // Stop track immediately as Web Speech API will request its own connection
-          tempStream.getTracks().forEach(track => track.stop());
-        }
-      } catch (err) {
-        console.warn('Microphone permission pre-check failed or denied:', err);
-        setStatusMsg('Lỗi: Chưa được cấp quyền Micro. Vui lòng bật Micro trong cài đặt trình duyệt để tiếp tục.');
-        return;
-      }
-
-      try {
+        // CALL SYNCHRONOUSLY FIRST to guarantee Safari/iOS user interaction gesture is preserved
         recognitionRef.current.start();
         setIsRecording(true);
         setRecordingTime(0);
         setStatusMsg('Hệ thống đang nghe... Trả lời phỏng vấn một cách chuyên nghiệp.');
       } catch (err) {
         console.error(err);
-        setStatusMsg('Lỗi kích hoạt micro nhận dạng giọng nói.');
+        setStatusMsg('Lỗi kích hoạt micro nhận diện giọng nói Web Speech. Hãy cấp quyền Micro trong trình duyệt.');
       }
     } else {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -238,9 +226,10 @@ export default function VoiceCoach() {
         mediaRecorderRef.current.start();
         setIsRecording(true);
         setRecordingTime(0);
-        setStatusMsg('Đang ghi âm cơ học (Sandbox)... Trả lời câu hỏi.');
+        setStatusMsg('Đang ghi âm (Mô phỏng Sandbox)... Hãy trả lời phỏng vấn, sau đó nhập văn bản.');
       } catch (err) {
-        setStatusMsg('Không thể mở micro.');
+        console.error('MediaRecorder start error:', err);
+        setStatusMsg('Lỗi bắt đầu ghi âm cơ học. Hãy cấp quyền truy cập Micro.');
       }
     }
   };
