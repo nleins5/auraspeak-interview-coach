@@ -6,12 +6,12 @@ import {
 } from 'lucide-react';
 import gsap from 'gsap';
 
-// MOCK QUESTIONS DECK
+// DANH SÁCH CÂU HỎI PHỎNG VẤN THỬ
 const INTERVIEW_QUESTIONS = [
-  { id: 1, category: "Behavioral", question: "Tell me about a time you faced a difficult conflict within your team. How did you resolve it?" },
-  { id: 2, category: "Leadership", question: "Describe a project you managed where the requirements changed suddenly. How did you adapt?" },
-  { id: 3, category: "Technical Fit", question: "Why do you want to join our organization, and what makes your unique skillset a perfect match?" },
-  { id: 4, category: "Problem Solving", question: "Tell me about a technical challenge you encountered. How did you go about identifying the root cause?" }
+  { id: 1, category: "Hành Vi", question: "Hãy kể về một lần bạn gặp phải xung đột khó khăn trong nhóm. Bạn đã giải quyết nó như thế nào?" },
+  { id: 2, category: "Lãnh Đạo", question: "Hãy mô tả một dự án bạn đã quản lý khi yêu cầu thay đổi đột ngột. Bạn đã thích ứng ra sao?" },
+  { id: 3, category: "Kỹ Thuật", question: "Tại sao bạn muốn gia nhập tổ chức của chúng tôi, và điều gì làm cho bộ kỹ năng độc đáo của bạn là một mảnh ghép hoàn hảo?" },
+  { id: 4, category: "Giải Quyết Vấn Đề", question: "Hãy kể về một thử thách kỹ thuật mà bạn đã gặp phải. Bạn đã làm thế nào để xác định nguyên nhân gốc rễ?" }
 ];
 
 export default function VoiceCoach() {
@@ -83,39 +83,75 @@ export default function VoiceCoach() {
     setCameraActive(false);
   };
 
+  const [isSTTSupported, setIsSTTSupported] = useState(true);
+  const isRecordingRef = useRef(false);
+  useEffect(() => {
+    isRecordingRef.current = isRecording;
+  }, [isRecording]);
+
   // Browser STT Setup
   useEffect(() => {
-    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const rec = new SpeechRecognition();
-      rec.continuous = true;
-      rec.interimResults = true;
-      rec.lang = 'vi-VN'; // Vietnamese primary for Interview Coach
+    const hasSTT = 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+    setIsSTTSupported(hasSTT);
 
-      rec.onresult = (event) => {
-        let interimTranscript = '';
-        let finalTranscript = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
-          if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
-          } else {
-            interimTranscript += event.results[i][0].transcript;
-          }
-        }
-        if (finalTranscript) {
-          setTranscript(prev => (prev + ' ' + finalTranscript).trim());
-        }
-      };
-
-      rec.onerror = (e) => {
-        console.error('STT Error:', e);
-      };
-
-      recognitionRef.current = rec;
+    if (!hasSTT) {
+      setSttProvider('manual');
+      return;
     }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const rec = new SpeechRecognition();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = 'vi-VN'; // Vietnamese primary for Interview Coach
+
+    rec.onresult = (event) => {
+      let interimTranscript = '';
+      let finalTranscript = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        } else {
+          interimTranscript += event.results[i][0].transcript;
+        }
+      }
+      if (finalTranscript) {
+        setTranscript(prev => (prev + ' ' + finalTranscript).trim());
+      }
+    };
+
+    rec.onerror = (e) => {
+      console.error('STT Error:', e);
+      if (e.error === 'not-allowed') {
+        setStatusMsg('Lỗi: Trình duyệt bị từ chối quyền truy cập Micro. Hãy cấp quyền truy cập thiết bị thu âm trong cài đặt trình duyệt để tiếp tục.');
+      } else if (e.error === 'network') {
+        setStatusMsg('Lỗi mạng: Không thể kết nối tới máy chủ Google Speech. Vui lòng kiểm tra internet.');
+      } else if (e.error === 'no-speech') {
+        console.warn('Không nghe thấy giọng nói phỏng vấn...');
+      } else {
+        setStatusMsg(`Lỗi nhận diện giọng nói: ${e.error}`);
+      }
+    };
+
+    rec.onend = () => {
+      // Auto-restart if we are still supposed to be recording
+      if (isRecordingRef.current) {
+        try {
+          rec.start();
+          console.log('SpeechRecognition auto-restarted.');
+        } catch (err) {
+          console.error('SpeechRecognition auto-restart failed:', err);
+        }
+      }
+    };
+
+    recognitionRef.current = rec;
 
     return () => {
       stopCamera();
+      try {
+        rec.stop();
+      } catch (err) {}
     };
   }, []);
 
@@ -164,6 +200,19 @@ export default function VoiceCoach() {
     
     if (sttProvider === 'browser' && recognitionRef.current) {
       try {
+        // Pre-emptive microphone permission request to trigger OS/Browser prompt reliably
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          // Stop track immediately as Web Speech API will request its own connection
+          tempStream.getTracks().forEach(track => track.stop());
+        }
+      } catch (err) {
+        console.warn('Microphone permission pre-check failed or denied:', err);
+        setStatusMsg('Lỗi: Chưa được cấp quyền Micro. Vui lòng bật Micro trong cài đặt trình duyệt để tiếp tục.');
+        return;
+      }
+
+      try {
         recognitionRef.current.start();
         setIsRecording(true);
         setRecordingTime(0);
@@ -200,10 +249,14 @@ export default function VoiceCoach() {
   const stopRecording = () => {
     if (isRecording) {
       if (sttProvider === 'browser' && recognitionRef.current) {
-        recognitionRef.current.stop();
+        try {
+          recognitionRef.current.stop();
+        } catch (err) {}
       }
       if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
+        try {
+          mediaRecorderRef.current.stop();
+        } catch (err) {}
       }
       setIsRecording(false);
       setStatusMsg('Đã kết thúc câu trả lời. Bấm "Chấm Điểm" để xem đánh giá STAR.');
@@ -391,13 +444,13 @@ export default function VoiceCoach() {
               <UserRoundCheck size={16} className="stroke-[2.2px]" />
             </div>
             <div>
-              <h1 className="text-sm font-extrabold tracking-tight">ZenithCoach</h1>
-              <p className="text-[8px] text-[#C9A84C] font-mono tracking-widest uppercase font-bold">The Executive Suite</p>
+              <h1 className="text-sm font-extrabold tracking-tight">Zenith Coach</h1>
+              <p className="text-[8px] text-[#C9A84C] font-mono tracking-widest uppercase font-bold">Phòng Điều Hành Cao Cấp</p>
             </div>
           </div>
 
           <div className="px-2 py-0.5 rounded border border-[#C9A84C]/30 bg-[#FAF8F5]/10 text-[8px] text-[#C9A84C] font-mono font-bold">
-            {engine === 'sandbox' ? 'SANDBOX' : 'GEMINI ACTIVE'}
+            {engine === 'sandbox' ? 'MÔ PHỎNG' : 'GEMINI TRỰC TIẾP'}
           </div>
         </header>
 
@@ -412,7 +465,7 @@ export default function VoiceCoach() {
               <div className="bg-[#0D0D12] text-[#FAF8F5] p-5 rounded-[2.2rem] shadow-md relative overflow-hidden shrink-0">
                 <div className="absolute -right-4 -bottom-4 w-20 h-20 rounded-full bg-[#C9A84C]/15 blur-lg"></div>
                 <div className="flex items-center gap-1.5 text-[9px] font-mono text-[#C9A84C] uppercase tracking-widest mb-1.5 font-bold">
-                  <BarChart2 size={10} /> Active Question Decks
+                  <BarChart2 size={10} /> Bộ Câu Hỏi Phỏng Vấn
                 </div>
                 <h3 className="text-xs font-extrabold text-[#FAF8F5] mb-1">{isUsingCustom ? 'Câu hỏi tự do' : activeQuestion.category}</h3>
                 <p className="text-xs font-serif italic text-white/95 leading-relaxed">
@@ -458,12 +511,18 @@ export default function VoiceCoach() {
                   ) : (
                     <div className="text-center space-y-1 text-[#C9A84C]/50 flex flex-col items-center">
                       <VideoOff size={14} />
-                      <span className="text-[6px] font-mono">OFF</span>
+                      <span className="text-[6px] font-mono">TẮT</span>
                     </div>
                   )}
                 </div>
 
                 <div className="flex-1 overflow-y-auto text-xs text-[#0D0D12] leading-relaxed pr-24 select-text">
+                  {!isSTTSupported && (
+                    <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-[10px] leading-normal flex items-start gap-2 shrink-0">
+                      <span className="text-amber-600 font-bold shrink-0">⚠️ LƯU Ý:</span>
+                      <span>Trình duyệt hiện tại không hỗ trợ chuyển giọng nói thành văn bản trực tiếp (STT). Bạn hãy mở ứng dụng bằng Safari/Chrome gốc hoặc chuyển sang chế độ <b>"Gõ thủ công"</b> ở menu bánh răng phía dưới góc phải màn hình để tiếp tục luyện tập.</span>
+                    </div>
+                  )}
                   {transcript ? (
                     <p className="font-semibold">{transcript}</p>
                   ) : textInput && sttProvider !== 'browser' ? (
@@ -506,7 +565,7 @@ export default function VoiceCoach() {
                 </div>
                 
                 <p className="text-[9px] font-mono text-[#2A2A35]/70 mt-2 tracking-wide font-bold">
-                  {isRecording ? `Ghi âm: ${formatTime(recordingTime)}` : 'TAP TO RECORD ANSWER'}
+                  {isRecording ? `Ghi âm: ${formatTime(recordingTime)}` : 'NHẤN ĐỂ GHI ÂM CÂU TRẢ LỜI'}
                 </p>
               </div>
 
@@ -536,18 +595,18 @@ export default function VoiceCoach() {
               {/* High-fidelity summary scores card */}
               <div className="bg-[#0D0D12] text-[#FAF8F5] p-4 rounded-[2.2rem] flex justify-between items-center shrink-0 shadow-md">
                 <div>
-                  <h3 className="text-[9px] font-mono text-[#C9A84C] uppercase tracking-widest font-bold">Zenith Executive</h3>
-                  <p className="text-base font-extrabold text-[#FAF8F5]">AI Score Report</p>
+                  <h3 className="text-[9px] font-mono text-[#C9A84C] uppercase tracking-widest font-bold">Ban Điều Hành Zenith</h3>
+                  <p className="text-base font-extrabold text-[#FAF8F5]">Báo Cáo Điểm AI</p>
                 </div>
                 
                 <div className="flex gap-2">
                   <div className="text-center bg-[#FAF8F5]/10 px-3 py-1.5 rounded-xl border border-white/10 shadow-2xs">
-                    <p className="text-[8px] text-[#C9A84C] font-mono uppercase font-bold">STAR</p>
+                    <p className="text-[8px] text-[#C9A84C] font-mono uppercase font-bold">ĐIỂM STAR</p>
                     <p className="text-sm font-extrabold text-white">{assessment.overall_score}</p>
                   </div>
                   <div className="text-center bg-[#FAF8F5]/10 px-3 py-1.5 rounded-xl border border-white/10 shadow-2xs">
-                    <p className="text-[8px] text-[#C9A84C] font-mono uppercase font-bold">READY</p>
-                    <p className="text-[10px] font-bold text-white leading-normal mt-1">{assessment.estimated_readiness.split(' ')[0]}</p>
+                    <p className="text-[8px] text-[#C9A84C] font-mono uppercase font-bold">TRẠNG THÁI</p>
+                    <p className="text-[9px] font-bold text-white leading-normal mt-1">{assessment.estimated_readiness}</p>
                   </div>
                 </div>
               </div>
@@ -639,7 +698,7 @@ export default function VoiceCoach() {
                   <div className="space-y-3">
                     <div className="p-4 rounded-[2.2rem] bg-white border border-neutral-200 space-y-2.5 shadow-2xs">
                       <p className="text-[9px] font-mono text-[#0D0D12] uppercase tracking-wider flex items-center gap-1 font-bold">
-                        <Sparkles size={11} className="text-[#C9A84C]" /> Executive Sample
+                        <Sparkles size={11} className="text-[#C9A84C]" /> Bản Mẫu Điều Hành
                       </p>
                       <p className="text-xs leading-relaxed text-[#0D0D12] font-serif italic bg-[#FAF8F5] p-3 rounded-lg border border-neutral-200 whitespace-pre-line">
                         "{assessment.better_version}"
@@ -670,8 +729,8 @@ export default function VoiceCoach() {
                      onChange={(e) => setEngine(e.target.value)}
                      className="w-full bg-white border border-neutral-200 rounded-xl p-3 text-xs text-[#0D0D12] focus:outline-none focus:border-[#C9A84C]"
                   >
-                    <option value="sandbox">Sandbox (Offline - 100% Free)</option>
-                    <option value="gemini">Google Gemini API (Direct Client)</option>
+                    <option value="sandbox">Sandbox (Ngoại tuyến - Miễn phí 100%)</option>
+                    <option value="gemini">Google Gemini API (Trực tiếp từ trình duyệt)</option>
                   </select>
                 </div>
 
@@ -701,7 +760,7 @@ export default function VoiceCoach() {
                     className="w-full bg-white border border-neutral-200 rounded-xl p-3 text-xs text-[#0D0D12] focus:outline-none focus:border-[#C9A84C]"
                   >
                     <option value="browser">Browser Web Speech API (NATIVE - Khuyên dùng)</option>
-                    <option value="mechanical">Audio cơ học (Sandbox simulator)</option>
+                    <option value="mechanical">Giọng nói mô phỏng (Trình giả lập Sandbox)</option>
                   </select>
                 </div>
               </div>
