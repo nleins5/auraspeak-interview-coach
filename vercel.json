@@ -1,0 +1,25 @@
+{
+  "name": "interview-coach",
+  "buildCommand": "npm install && npm run build",
+  "outputDirectory": "ui/dist",
+  "framework": null,
+  "installCommand": "echo 'install handled by buildCommand'",
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Permissions-Policy", "value": "microphone=(*)" }
+      ]
+    }
+  ],
+  "rewrites": [
+    { "source": "/v1/:path*", "destination": "/api/index" },
+    { "source": "/health", "destination": "/api/index" }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "interview-coach",
+  "version": "2.0.0",
+  "description": "Standalone AI job interview coach with voice input and FastAPI backend",
+  "scripts": {
+    "dev:backend": "DISABLE_DATABASE=1 GATEWAY_SECRET= REQUEST_TIMEOUT_S=8 MAX_RETRIES_PER_PROVIDER=0 ROUTING_MODE=chain python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000",
+    "dev:ui": "VITE_APP_FUNCTION=interview npm run dev --workspace ui -- --host 127.0.0.1 --port 5172",
+    "build": "VITE_APP_FUNCTION=interview npm run build --workspace ui",
+    "start": "python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "packageManager": "npm@10.0.0",
+  "workspaces": [
+    "ui"
+  ]
+}

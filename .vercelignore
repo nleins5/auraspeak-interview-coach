@@ -1,0 +1,5 @@
+# Ignore logs
+*.log
+.vercel/
+ui/node_modules/
+node_modules/
