@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { 
   UserRoundCheck, Mic, Square, Settings, Video, VideoOff,
-  Sparkles, ShieldCheck, Trophy, AlertCircle, CheckCircle2, 
-  ChevronRight, RefreshCw, BarChart2, MessageSquare, Clock, Award,
+  Sparkles, AlertCircle, CheckCircle2,
+  ChevronRight, RefreshCw, BarChart2, Award,
   Volume2, Play, Pause, Loader2
 } from 'lucide-react';
 import gsap from 'gsap';
@@ -109,13 +109,10 @@ export default function VoiceCoach() {
     rec.lang = 'vi-VN'; // Vietnamese primary for Interview Coach
 
     rec.onresult = (event) => {
-      let interimTranscript = '';
       let finalTranscript = '';
       for (let i = event.resultIndex; i < event.results.length; ++i) {
         if (event.results[i].isFinal) {
           finalTranscript += event.results[i][0].transcript;
-        } else {
-          interimTranscript += event.results[i][0].transcript;
         }
       }
       if (finalTranscript) {
@@ -154,7 +151,9 @@ export default function VoiceCoach() {
       stopCamera();
       try {
         rec.stop();
-      } catch (err) {}
+      } catch {
+        // Ignore cleanup errors when recognition was never started.
+      }
     };
   }, []);
 
@@ -287,13 +286,17 @@ export default function VoiceCoach() {
     if (sttProvider === 'browser' && recognitionRef.current) {
       try {
         recognitionRef.current.stop();
-      } catch (err) {}
+      } catch {
+        // Ignore stop errors when recognition is already inactive.
+      }
     }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       try {
         mediaRecorderRef.current.stop();
         mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-      } catch (err) {}
+      } catch {
+        // Ignore stop errors when recorder tracks were already released.
+      }
     }
     
     if (sttProvider === 'cloud') {
