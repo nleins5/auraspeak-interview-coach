@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   UserRoundCheck, Mic, Square, Settings, Video, VideoOff,
   Sparkles, ShieldCheck, Trophy, AlertCircle, CheckCircle2, 
-  ChevronRight, RefreshCw, BarChart2, MessageSquare, Clock
+  ChevronRight, RefreshCw, BarChart2, MessageSquare, Clock, Award
 } from 'lucide-react';
 import gsap from 'gsap';
 
@@ -19,7 +19,10 @@ export default function VoiceCoach() {
   const [engine, setEngine] = useState(() => localStorage.getItem('int_coach_engine') || 'sandbox');
   const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('int_coach_gemini_key') || '');
   const [sttProvider, setSttProvider] = useState(() => localStorage.getItem('int_coach_stt') || 'browser');
-  const [showSettings, setShowSettings] = useState(false);
+  
+  // Navigation / View states
+  const [activeView, setActiveView] = useState('practice'); // practice, report, settings
+  const [showTopicDrawer, setShowTopicDrawer] = useState(false);
 
   // Video / Webcam stream Ref
   const [cameraActive, setCameraActive] = useState(false);
@@ -35,7 +38,7 @@ export default function VoiceCoach() {
   const [transcript, setTranscript] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
-  const [statusMsg, setStatusMsg] = useState('Sẵn sàng. Chọn câu hỏi ở cột trái và bật Camera để bắt đầu phỏng vấn thử!');
+  const [statusMsg, setStatusMsg] = useState('Sẵn sàng. Hãy chọn câu hỏi ở hộc kéo dưới, bật camera và nhấn Ghi âm để phỏng vấn thử!');
   
   // Scoring States
   const [isLoading, setIsLoading] = useState(false);
@@ -55,16 +58,16 @@ export default function VoiceCoach() {
       stopCamera();
     } else {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 320 } });
         streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
         setCameraActive(true);
-        setStatusMsg('Camera đã được bật. Bạn trông rất tự tin và sẵn sàng!');
+        setStatusMsg('Camera đã được bật trong bong bóng hình tròn góc trên.');
       } catch (err) {
         console.error(err);
-        setStatusMsg('Không thể mở Camera. Vui lòng cấp quyền hoặc sử dụng ảnh đại diện giả lập.');
+        setStatusMsg('Không thể mở Camera. Vui lòng cấp quyền micro/camera.');
       }
     }
   };
@@ -135,8 +138,8 @@ export default function VoiceCoach() {
     localStorage.setItem('int_coach_engine', engine);
     localStorage.setItem('int_coach_gemini_key', geminiKey);
     localStorage.setItem('int_coach_stt', sttProvider);
-    setShowSettings(false);
     setStatusMsg('Cấu hình phỏng vấn đã được lưu.');
+    setActiveView('practice');
   };
 
   // Entry Animations
@@ -203,7 +206,7 @@ export default function VoiceCoach() {
         mediaRecorderRef.current.stop();
       }
       setIsRecording(false);
-      setStatusMsg('Đã kết thúc câu trả lời. Bấm "Chấm phỏng vấn" để xem đánh giá STAR.');
+      setStatusMsg('Đã kết thúc câu trả lời. Bấm "Chấm Điểm" để xem đánh giá STAR.');
     }
   };
 
@@ -231,11 +234,11 @@ export default function VoiceCoach() {
       setAssessment({
         overall_score: score,
         estimated_readiness: readiness,
-        brutally_honest_summary: `Câu trả lời của bạn có độ dài ${wordCount} từ. Trả lời khá tự tin, tuy nhiên nên tập trung giải thích rõ ràng hơn phần Kết quả (Result) thay vì nói quá nhiều về Tình huống (Situation). Nhịp nói đạt ${pacingWpm} WPM rất chuẩn mực.`,
+        brutally_honest_summary: `Câu trả lời phỏng vấn thử của bạn có độ dài ${wordCount} từ. Trả lời khá tự tin, tuy nhiên nên tập trung giải thích rõ ràng hơn phần Kết quả (Result) thay vì mô tả quá sâu vào Tình huống (Situation). Nhịp nói đạt ${pacingWpm} WPM rất chuẩn mực.`,
         star_method_analysis: {
           situation: "Bạn nêu được bối cảnh xung đột hoặc khó khăn ban đầu tương đối ổn thỏa.",
           task: "Nhiệm vụ và vai trò chịu trách nhiệm của cá nhân được phác thảo ở mức chấp nhận được.",
-          action: "Các hành động cụ thể để xử lý vấn đề được liệt kê rõ, tuy nhiên cần làm nổi bật vai trò kỹ thuật hoặc năng lực của bản thân hơn nữa.",
+          action: "Các hành động cụ thể để xử lý vấn đề được liệt kê rõ, tuy nhiên cần làm nổi bật vai trò lãnh đạo hoặc chuyên môn cá nhân của bạn.",
           result: "Phần kết quả chưa thực sự rõ ràng về mặt số liệu (ví dụ: hiệu suất tăng bao nhiêu %, tiết kiệm được bao nhiêu thời gian)."
         },
         best_parts: [
@@ -244,12 +247,13 @@ export default function VoiceCoach() {
         ],
         areas_for_improvement: [
           `Bạn lặp lại từ ngập ngừng '${fillerWords}' lần. Cố gắng sử dụng các cụm từ nối chuyên nghiệp hơn như 'Do đó', 'Bên cạnh đó'.`,
-          "Cần bổ sung số liệu cụ thể làm minh chứng cho phần kết quả (STAR)."
+          "Cần bổ sung số liệu cụ thể làm minh chứng cho phần kết quả (Result) trong cấu trúc STAR."
         ],
-        better_version: "Để tôi đề xuất một cách trả lời chuyên nghiệp hơn:\n\"Trong dự án X trước đây, tôi chịu trách nhiệm chính về giải pháp đồng bộ dữ liệu. Khi phát sinh mâu thuẫn về kiến trúc hệ thống giữa hai bên, tôi đã chủ động tổ chức một buổi review kỹ thuật khách quan để so sánh hiệu năng. Kết quả là chúng tôi đã thống nhất được phương án tối ưu nhất, giúp đẩy nhanh tiến độ dự án thêm 15% so với kế hoạch ban đầu.\""
+        better_version: "Để tôi đề xuất một cách trả lời mẫu hoàn hảo:\n\"Trong dự án X trước đây, tôi chịu trách nhiệm chính về giải pháp đồng bộ dữ liệu. Khi phát sinh mâu thuẫn về kiến trúc hệ thống giữa hai bên, tôi đã chủ động tổ chức một buổi review kỹ thuật khách quan để so sánh hiệu năng. Kết quả là chúng tôi đã thống nhất được phương án tối ưu nhất, giúp đẩy nhanh tiến độ dự án thêm 15% so với kế hoạch ban đầu.\""
       });
       setIsLoading(false);
       setStatusMsg('Đã hoàn tất chấm điểm phỏng vấn.');
+      setActiveView('report');
     }, 1500);
   };
 
@@ -324,6 +328,7 @@ export default function VoiceCoach() {
       const parsed = JSON.parse(rawText.trim());
       setAssessment(parsed);
       setStatusMsg('Đã nhận phản hồi phân tích từ Gemini.');
+      setActiveView('report');
     } catch (err) {
       console.error(err);
       setStatusMsg(`Lỗi kết nối API: ${err.message}. Tự động kích hoạt Sandbox.`);
@@ -348,283 +353,248 @@ export default function VoiceCoach() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F5F6F8] text-[#1E1E24] font-sans selection:bg-[#3E54AC] selection:text-white px-6 py-8 relative">
-      
-      {/* Navbar */}
-      <header className="max-w-6xl mx-auto flex justify-between items-center mb-8 fade-in-element">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#3E54AC] flex items-center justify-center text-white">
-            <UserRoundCheck size={22} />
-          </div>
-          <div>
-            <h1 className="text-xl font-extrabold tracking-tight text-[#1E1E24]">Interview Coach</h1>
-            <p className="text-xs text-[#3E54AC] font-mono tracking-widest uppercase">The Executive Suite</p>
-          </div>
-        </div>
+    <div className="min-h-screen w-full bg-[#0D0D12] flex items-center justify-center font-sans p-0 sm:p-8 relative selection:bg-[#C9A84C] selection:text-[#0D0D12] overflow-hidden">
+      {/* Global CSS noise overlay using inline SVG filter */}
+      <div className="fixed inset-0 pointer-events-none z-[9999] opacity-[0.05]" style={{ filter: 'url(#noiseFilter)' }}></div>
+      <svg className="hidden">
+        <filter id="noiseFilter">
+          <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch" />
+        </filter>
+      </svg>
 
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={() => setShowSettings(!showSettings)}
-            className="w-10 h-10 rounded-xl border border-[#E2E8F0] bg-white flex items-center justify-center text-[#1E1E24] hover:bg-[#F5F6F8] transition-colors"
-          >
-            <Settings size={18} />
-          </button>
-          
-          <div className="px-3 py-1.5 rounded-lg border border-[#E2E8F0] bg-white text-xs text-[#3E54AC] font-mono flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${engine === 'sandbox' ? 'bg-amber-400' : 'bg-[#3E54AC]'} animate-pulse`}></span>
-            {engine === 'sandbox' ? 'Sandbox Mode' : 'Gemini Active'}
-          </div>
-        </div>
-      </header>
+      {/* Ambient glassmorphic blobs for desktop frame contrast */}
+      <div className="absolute top-[-20%] left-[-20%] w-[60%] h-[60%] rounded-full bg-[#C9A84C]/10 blur-[120px] pointer-events-none hidden md:block"></div>
+      <div className="absolute bottom-[-20%] right-[-20%] w-[60%] h-[60%] rounded-full bg-[#FAF8F5]/5 blur-[120px] pointer-events-none hidden md:block"></div>
 
-      {/* Grid Layout */}
-      <main className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+      {/* Main Smartphone device shell mockup container (Midnight Luxe Accent) */}
+      <div className="w-full h-screen sm:h-[844px] sm:w-[390px] sm:rounded-[3.2rem] sm:border-[10px] sm:border-neutral-900 sm:ring-4 sm:ring-neutral-800 bg-[#FAF8F5] sm:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.8)] relative flex flex-col overflow-hidden text-[#0D0D12]">
         
-        {/* Left column: Video simulator and questions */}
-        <section className="lg:col-span-5 space-y-6 fade-in-element">
-          
-          {/* Mock Webcam View */}
-          <div className="bg-white rounded-[2rem] border border-[#E2E8F0] p-4 shadow-sm space-y-4">
-            <div className="relative aspect-video rounded-2xl bg-black overflow-hidden border border-slate-800 flex items-center justify-center">
-              {cameraActive ? (
-                <video 
-                  ref={videoRef} 
-                  autoPlay 
-                  playsInline 
-                  muted 
-                  className="w-full h-full object-cover scale-x-[-1]"
-                />
-              ) : (
-                <div className="text-center space-y-2 text-slate-500">
-                  <VideoOff size={36} className="mx-auto text-slate-600" />
-                  <p className="text-xs font-mono">CAMERA TẮT</p>
-                </div>
-              )}
+        {/* iOS-Style Device Notch and Status Bar Components */}
+        <div className="h-11 px-6 pt-3 flex justify-between items-center bg-[#FAF8F5]/90 backdrop-blur-md z-30 select-none text-[11px] font-mono text-[#0D0D12] font-bold shrink-0">
+          <span>9:41</span>
+          <div className="w-32 h-5 bg-black rounded-full absolute left-1/2 -translate-x-1/2 top-2.5 hidden sm:block"></div>
+          <div className="flex items-center gap-1.5">
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 3c-4.97 0-9 4.03-9 9 0 2.12.74 4.07 1.97 5.61L18.39 4.97C16.85 3.74 14.9 3 12 3zm6.03 3.39L4.97 18.03C6.51 19.26 8.46 20 12 20c4.97 0 9-4.03 9-9 0-2.12-.74-4.07-1.97-5.61z" />
+            </svg>
+            <span className="text-[9px]">5G</span>
+            <div className="w-5 h-2.5 border border-[#0D0D12]/70 rounded-xs p-0.5 flex items-center">
+              <div className="h-full w-3.5 bg-[#0D0D12] rounded-[1px]"></div>
+            </div>
+          </div>
+        </div>
 
-              {/* OVERLAYS */}
-              <div className="absolute top-3 left-3 px-2.5 py-1 rounded bg-black/60 backdrop-blur-md text-[10px] text-white font-mono flex items-center gap-1.5">
-                <span className={`w-1.5 h-1.5 rounded-full ${isRecording ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`}></span>
-                {isRecording ? 'LIVE RECORDING' : 'CAMERA READY'}
+        {/* Small floating header */}
+        <header className="flex justify-between items-center px-5 py-2.5 border-b border-[#FAF8F5]/10 bg-[#0D0D12] text-[#FAF8F5] z-20 shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-xl bg-[#C9A84C] flex items-center justify-center text-[#0D0D12] shadow-xs">
+              <UserRoundCheck size={16} className="stroke-[2.2px]" />
+            </div>
+            <div>
+              <h1 className="text-sm font-extrabold tracking-tight">ZenithCoach</h1>
+              <p className="text-[8px] text-[#C9A84C] font-mono tracking-widest uppercase font-bold">The Executive Suite</p>
+            </div>
+          </div>
+
+          <div className="px-2 py-0.5 rounded border border-[#C9A84C]/30 bg-[#FAF8F5]/10 text-[8px] text-[#C9A84C] font-mono font-bold">
+            {engine === 'sandbox' ? 'SANDBOX' : 'GEMINI ACTIVE'}
+          </div>
+        </header>
+
+        {/* Dynamic View Panels */}
+        <div className="flex-1 overflow-hidden relative">
+          
+          {/* A. PRACTICE PANEL */}
+          {activeView === 'practice' && (
+            <div className="absolute inset-0 px-5 py-4 flex flex-col gap-4 overflow-y-auto pb-24">
+              
+              {/* Question display card */}
+              <div className="bg-[#0D0D12] text-[#FAF8F5] p-5 rounded-[2.2rem] shadow-md relative overflow-hidden shrink-0">
+                <div className="absolute -right-4 -bottom-4 w-20 h-20 rounded-full bg-[#C9A84C]/15 blur-lg"></div>
+                <div className="flex items-center gap-1.5 text-[9px] font-mono text-[#C9A84C] uppercase tracking-widest mb-1.5 font-bold">
+                  <BarChart2 size={10} /> Active Question Decks
+                </div>
+                <h3 className="text-xs font-extrabold text-[#FAF8F5] mb-1">{isUsingCustom ? 'Câu hỏi tự do' : activeQuestion.category}</h3>
+                <p className="text-xs font-serif italic text-white/95 leading-relaxed">
+                  "{isUsingCustom ? (customQuestion || 'Nhập câu hỏi tự do phỏng vấn bên dưới...') : activeQuestion.question}"
+                </p>
+                
+                <div className="flex items-center justify-between mt-3.5">
+                  <button
+                    onClick={() => setShowTopicDrawer(true)}
+                    className="px-3 py-1.5 rounded-full bg-[#C9A84C] hover:bg-[#b09340] text-[#0D0D12] text-[9px] font-bold flex items-center gap-1 transition-all cursor-pointer shadow-sm"
+                  >
+                    Đổi câu hỏi <ChevronRight size={10} />
+                  </button>
+
+                  <button
+                    onClick={toggleCamera}
+                    className={`px-3 py-1.5 rounded-full text-[9px] font-bold flex items-center gap-1 border transition-all cursor-pointer ${
+                      cameraActive 
+                        ? 'bg-red-950/80 border-red-500/50 text-red-400 hover:bg-red-900/60' 
+                        : 'bg-white/10 border-white/20 text-[#FAF8F5] hover:bg-white/20'
+                    }`}
+                  >
+                    {cameraActive ? <VideoOff size={10} /> : <Video size={10} />}
+                    {cameraActive ? 'Tắt Cam' : 'Bật Cam'}
+                  </button>
+                </div>
               </div>
 
-              {isRecording && (
-                <div className="absolute bottom-3 right-3 px-2 py-1 rounded bg-red-600/80 text-[10px] text-white font-bold font-mono">
-                  REC {formatTime(recordingTime)}
+              {/* Speech transcript output block with webcam bubble inside */}
+              <div className="bg-white rounded-[2.2rem] border border-neutral-200 p-5 shadow-2xs flex-1 flex flex-col gap-3 min-h-[140px] relative overflow-hidden">
+                <div className="text-[9px] font-mono text-[#0D0D12] uppercase tracking-wider font-bold shrink-0">Bản ghi & Camera</div>
+                
+                {/* Webcam PiP bubble */}
+                <div className="absolute top-4 right-4 w-20 h-20 rounded-full overflow-hidden border-2 border-[#C9A84C] shadow-lg z-20 bg-black flex items-center justify-center">
+                  {cameraActive ? (
+                    <video 
+                      ref={videoRef} 
+                      autoPlay 
+                      playsInline 
+                      muted 
+                      className="w-full h-full object-cover scale-x-[-1]"
+                    />
+                  ) : (
+                    <div className="text-center space-y-1 text-[#C9A84C]/50 flex flex-col items-center">
+                      <VideoOff size={14} />
+                      <span className="text-[6px] font-mono">OFF</span>
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            <div className="flex justify-between items-center">
-              <button
-                onClick={toggleCamera}
-                className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 border transition-all ${
-                  cameraActive 
-                    ? 'bg-red-50 border-red-200 text-red-600 hover:bg-red-100' 
-                    : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
-                }`}
-              >
-                {cameraActive ? <VideoOff size={14} /> : <Video size={14} />}
-                {cameraActive ? 'Tắt Webcam' : 'Bật Webcam'}
-              </button>
+                <div className="flex-1 overflow-y-auto text-xs text-[#0D0D12] leading-relaxed pr-24 select-text">
+                  {transcript ? (
+                    <p className="font-semibold">{transcript}</p>
+                  ) : textInput && sttProvider !== 'browser' ? (
+                    <p className="font-semibold">{textInput}</p>
+                  ) : (
+                    <p className="text-[#2A2A35]/60 italic pr-8">Câu trả lời phỏng vấn (STT tiếng Việt) của bạn sẽ hiển thị tại đây...</p>
+                  )}
+                </div>
 
-              <span className="text-xs text-slate-400 font-mono">
-                Pacing telemetry: Active
-              </span>
-            </div>
-          </div>
-
-          {/* Question Selector */}
-          <div className="bg-white rounded-[2rem] border border-[#E2E8F0] p-6 shadow-sm">
-            <h2 className="text-sm font-mono text-[#3E54AC] uppercase tracking-wider mb-4 flex items-center gap-2">
-              <BarChart2 size={16} /> Chọn câu hỏi phỏng vấn
-            </h2>
-            <div className="space-y-3">
-              {INTERVIEW_QUESTIONS.map((q) => (
-                <button
-                  key={q.id}
-                  onClick={() => {
-                    setActiveQuestion(q);
-                    setIsUsingCustom(false);
-                    setTranscript('');
-                    setAssessment(null);
-                  }}
-                  className={`w-full text-left p-3.5 rounded-2xl border text-sm transition-all duration-200 ${
-                    activeQuestion.id === q.id && !isUsingCustom
-                      ? 'border-[#3E54AC] bg-[#3E54AC]/5 text-[#1E1E24]'
-                      : 'border-[#F5F6F8] hover:border-[#E2E8F0] bg-[#F5F6F8]/40'
-                  }`}
-                >
-                  <p className="font-semibold text-xs text-[#3E54AC] mb-1">{q.category}</p>
-                  <p className="text-xs text-slate-500 line-clamp-1">{q.question}</p>
-                </button>
-              ))}
-              
-              <button
-                onClick={() => {
-                  setIsUsingCustom(true);
-                  setTranscript('');
-                  setAssessment(null);
-                }}
-                className={`w-full text-left p-3.5 rounded-2xl border text-sm transition-all duration-200 ${
-                  isUsingCustom
-                    ? 'border-[#3E54AC] bg-[#3E54AC]/5'
-                    : 'border-[#F5F6F8] hover:border-[#E2E8F0] bg-[#F5F6F8]/40'
-                }`}
-              >
-                <p className="font-semibold text-xs text-[#3E54AC] mb-1">Câu hỏi tự do</p>
-                <p className="text-xs text-slate-500">Tự điền câu hỏi phỏng vấn từ nhà tuyển dụng.</p>
-              </button>
-            </div>
-
-            <div className="mt-6 pt-5 border-t border-[#E2E8F0]">
-              <p className="text-xs font-semibold text-[#3E54AC] uppercase mb-1">Yêu cầu phỏng vấn:</p>
-              {isUsingCustom ? (
-                <textarea
-                  value={customQuestion}
-                  onChange={(e) => setCustomQuestion(e.target.value)}
-                  placeholder="Nhập câu hỏi phỏng vấn của riêng bạn tại đây..."
-                  className="w-full text-sm bg-[#F5F6F8] border border-[#E2E8F0] rounded-xl p-3 text-[#1E1E24] focus:outline-none focus:border-[#3E54AC] resize-none h-20"
-                />
-              ) : (
-                <p className="text-sm font-serif italic text-[#1E1E24]">"{activeQuestion.question}"</p>
-              )}
-            </div>
-          </div>
-
-        </section>
-
-        {/* Right column: Responses and Assessment details */}
-        <section className="lg:col-span-7 space-y-6 fade-in-element">
-          
-          {/* Speak / Text Control panel */}
-          <div className="bg-white rounded-[2rem] border border-[#E2E8F0] p-6 shadow-sm space-y-4">
-            <h2 className="text-sm font-mono text-[#3E54AC] uppercase tracking-wider flex justify-between items-center">
-              <span>Bắt đầu trả lời</span>
-            </h2>
-
-            {sttProvider === 'browser' ? (
-              <div className="min-h-36 bg-[#F5F6F8] rounded-2xl border border-[#E2E8F0] p-4 text-sm text-[#1E1E24] relative overflow-y-auto max-h-48">
-                {transcript ? (
-                  <p className="leading-relaxed">{transcript}</p>
-                ) : (
-                  <span className="text-slate-400 italic">Câu trả lời phỏng vấn (STT tiếng Việt) của bạn sẽ hiển thị tại đây...</span>
+                {sttProvider !== 'browser' && (
+                  <textarea
+                    value={textInput}
+                    onChange={(e) => setTextInput(e.target.value)}
+                    placeholder="Gõ trực tiếp câu trả lời của bạn tại đây để kiểm tra..."
+                    className="w-full h-16 bg-[#FAF8F5] border border-neutral-200 rounded-2xl p-3 text-xs focus:outline-none focus:border-[#0D0D12] resize-none shrink-0"
+                  />
                 )}
               </div>
-            ) : (
-              <textarea
-                value={textInput}
-                onChange={(e) => setTextInput(e.target.value)}
-                placeholder="Nhập câu trả lời phỏng vấn của bạn bằng tiếng Việt..."
-                className="w-full min-h-36 bg-[#F5F6F8] border border-[#E2E8F0] rounded-2xl p-4 text-sm focus:outline-none focus:border-[#3E54AC]"
-              />
-            )}
 
-            <div className="flex items-center gap-3">
-              {isRecording ? (
-                <button
-                  onClick={stopRecording}
-                  className="flex-1 h-14 rounded-2xl bg-red-600 text-white font-bold flex items-center justify-center gap-2 hover:bg-red-700 transition-colors"
-                >
-                  <Square size={16} /> Kết thúc trả lời
-                </button>
-              ) : (
-                <button
-                  onClick={startRecording}
-                  className="flex-1 h-14 rounded-2xl bg-[#3E54AC] text-white font-bold flex items-center justify-center gap-2 hover:bg-[#2C3E8A] transition-colors"
-                >
-                  <Mic size={18} /> Ghi âm trả lời
-                </button>
-              )}
-
-              <button
-                onClick={handleAnalyze}
-                disabled={isLoading || isRecording}
-                className="px-6 h-14 rounded-2xl bg-[#1E1E24] text-white font-semibold flex items-center justify-center gap-2 hover:bg-black transition-colors disabled:opacity-40"
-              >
-                {isLoading ? <RefreshCw className="animate-spin" size={16} /> : <Sparkles size={16} />}
-                Chấm Điểm
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-500 font-mono leading-relaxed bg-[#F5F6F8] p-3 rounded-xl border border-slate-200">
-              {statusMsg}
-            </p>
-          </div>
-
-          {/* Assessment Panels */}
-          {isLoading ? (
-            <div className="bg-white rounded-[2rem] border border-[#E2E8F0] p-12 text-center shadow-sm space-y-4">
-              <RefreshCw className="animate-spin text-[#3E54AC] mx-auto" size={40} />
-              <h3 className="font-bold text-lg">Đang đối soát tiêu chí phỏng vấn...</h3>
-              <p className="text-sm text-slate-500 max-w-sm mx-auto">Coach đang phân tích cấu trúc câu chuyện STAR và đánh giá tính logic của bài nói.</p>
-            </div>
-          ) : assessment ? (
-            <div className="bg-white rounded-[2rem] border border-[#E2E8F0] p-6 shadow-sm space-y-6">
-              
-              {/* Score header summary */}
-              <div className="flex flex-wrap justify-between items-center gap-4 bg-[#3E54AC]/5 p-5 rounded-2xl border border-[#3E54AC]/10">
-                <div className="space-y-1">
-                  <h3 className="text-sm font-mono text-[#3E54AC] uppercase tracking-wider">Mức độ sẵn sàng tuyển dụng</h3>
-                  <p className="text-2xl font-extrabold text-[#1E1E24]">{assessment.estimated_readiness}</p>
+              {/* Siri Breathing Voice Capture interface widget */}
+              <div className="flex flex-col items-center justify-center py-2 shrink-0 relative">
+                <div className="relative flex items-center justify-center">
+                  {isRecording && (
+                    <>
+                      <div className="absolute w-24 h-24 rounded-full bg-[#C9A84C]/20 animate-ping"></div>
+                      <div className="absolute w-20 h-20 rounded-full bg-[#C9A84C]/30 animate-pulse"></div>
+                    </>
+                  )}
+                  
+                  <button
+                    onClick={isRecording ? stopRecording : startRecording}
+                    className={`w-16 h-16 rounded-full flex items-center justify-center shadow-md transition-all transform cursor-pointer z-10 ${
+                      isRecording 
+                        ? 'bg-red-600 text-white hover:scale-95' 
+                        : 'bg-[#0D0D12] hover:bg-black text-[#C9A84C] hover:scale-105'
+                    }`}
+                  >
+                    {isRecording ? <Square size={18} fill="white" /> : <Mic size={22} />}
+                  </button>
                 </div>
                 
-                <div className="text-center bg-white px-5 py-3 rounded-xl border border-[#E2E8F0] min-w-28">
-                  <p className="text-[10px] text-slate-400 font-mono uppercase tracking-wider">Score</p>
-                  <p className="text-3xl font-black text-[#3E54AC]">{assessment.overall_score} <span className="text-xs text-slate-400 font-normal">/100</span></p>
+                <p className="text-[9px] font-mono text-[#2A2A35]/70 mt-2 tracking-wide font-bold">
+                  {isRecording ? `Ghi âm: ${formatTime(recordingTime)}` : 'TAP TO RECORD ANSWER'}
+                </p>
+              </div>
+
+              {/* Action submission buttons */}
+              <div className="flex gap-2 shrink-0">
+                <button
+                  onClick={handleAnalyze}
+                  disabled={isLoading || isRecording}
+                  className="w-full h-11 rounded-xl bg-[#0D0D12] hover:bg-black text-[#C9A84C] text-xs font-bold flex items-center justify-center gap-1.5 transition-all disabled:opacity-40 shadow-sm"
+                >
+                  {isLoading ? <RefreshCw className="animate-spin" size={14} /> : <Sparkles size={14} />}
+                  Chấm Điểm Phỏng Vấn
+                </button>
+              </div>
+
+              {/* Status log widget */}
+              <p className="text-[9px] text-[#2A2A35]/70 font-mono leading-relaxed bg-[#FAF8F5] p-2.5 rounded-xl border border-neutral-200 shrink-0">
+                {statusMsg}
+              </p>
+            </div>
+          )}
+
+          {/* B. REPORT PANEL */}
+          {activeView === 'report' && assessment && (
+            <div className="absolute inset-0 px-5 py-4 flex flex-col gap-4 overflow-y-auto pb-24">
+              
+              {/* High-fidelity summary scores card */}
+              <div className="bg-[#0D0D12] text-[#FAF8F5] p-4 rounded-[2.2rem] flex justify-between items-center shrink-0 shadow-md">
+                <div>
+                  <h3 className="text-[9px] font-mono text-[#C9A84C] uppercase tracking-widest font-bold">Zenith Executive</h3>
+                  <p className="text-base font-extrabold text-[#FAF8F5]">AI Score Report</p>
+                </div>
+                
+                <div className="flex gap-2">
+                  <div className="text-center bg-[#FAF8F5]/10 px-3 py-1.5 rounded-xl border border-white/10 shadow-2xs">
+                    <p className="text-[8px] text-[#C9A84C] font-mono uppercase font-bold">STAR</p>
+                    <p className="text-sm font-extrabold text-white">{assessment.overall_score}</p>
+                  </div>
+                  <div className="text-center bg-[#FAF8F5]/10 px-3 py-1.5 rounded-xl border border-white/10 shadow-2xs">
+                    <p className="text-[8px] text-[#C9A84C] font-mono uppercase font-bold">READY</p>
+                    <p className="text-[10px] font-bold text-white leading-normal mt-1">{assessment.estimated_readiness.split(' ')[0]}</p>
+                  </div>
                 </div>
               </div>
 
-              {/* Tabs */}
-              <div className="flex border-b border-[#E2E8F0]">
+              {/* Evaluation sub-tabs */}
+              <div className="flex border-b border-[#FAF8F5]/10 text-xs shrink-0 font-bold">
                 <button
                   onClick={() => setActiveTab('star')}
-                  className={`pb-3 px-4 font-semibold text-sm border-b-2 transition-all ${
-                    activeTab === 'star' ? 'border-[#3E54AC] text-[#3E54AC]' : 'border-transparent text-slate-500 hover:text-[#1E1E24]'
+                  className={`flex-1 pb-2 text-center border-b-2 transition-all ${
+                    activeTab === 'star' ? 'border-[#C9A84C] text-[#0D0D12]' : 'border-transparent text-[#2A2A35]/60'
                   }`}
                 >
                   Phân tích STAR
                 </button>
                 <button
                   onClick={() => setActiveTab('strengths')}
-                  className={`pb-3 px-4 font-semibold text-sm border-b-2 transition-all ${
-                    activeTab === 'strengths' ? 'border-[#3E54AC] text-[#3E54AC]' : 'border-transparent text-slate-500 hover:text-[#1E1E24]'
+                  className={`flex-1 pb-2 text-center border-b-2 transition-all ${
+                    activeTab === 'strengths' ? 'border-[#C9A84C] text-[#0D0D12]' : 'border-transparent text-[#2A2A35]/60'
                   }`}
                 >
-                  Ưu & Nhược điểm
+                  Ưu & Nhược
                 </button>
                 <button
                   onClick={() => setActiveTab('rewrite')}
-                  className={`pb-3 px-4 font-semibold text-sm border-b-2 transition-all ${
-                    activeTab === 'rewrite' ? 'border-[#3E54AC] text-[#3E54AC]' : 'border-transparent text-slate-500 hover:text-[#1E1E24]'
+                  className={`flex-1 pb-2 text-center border-b-2 transition-all ${
+                    activeTab === 'rewrite' ? 'border-[#C9A84C] text-[#0D0D12]' : 'border-transparent text-[#2A2A35]/60'
                   }`}
                 >
-                  Đề xuất viết lại
+                  Viết lại
                 </button>
               </div>
 
-              {/* Tab Content */}
-              <div className="space-y-4 min-h-64">
-                
+              {/* Main review details content scrolling area */}
+              <div className="flex-1 overflow-y-auto space-y-3">
                 {activeTab === 'star' && (
-                  <div className="space-y-4">
-                    <div className="p-4 rounded-xl bg-[#F5F6F8] border border-slate-200">
-                      <p className="text-xs font-mono text-[#3E54AC] uppercase tracking-wider mb-1 flex items-center gap-1">
-                        <MessageSquare size={14} /> Nhận xét tổng quan:
-                      </p>
-                      <p className="text-sm font-serif italic leading-relaxed text-[#1E1E24]">
-                        "{assessment.brutally_honest_summary}"
-                      </p>
+                  <div className="space-y-3">
+                    <div className="p-4 rounded-2xl bg-white border border-neutral-200 text-xs leading-relaxed italic text-[#0D0D12] font-serif shadow-2xs">
+                      "{assessment.brutally_honest_summary}"
                     </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
+                    <div className="grid grid-cols-1 gap-2.5">
                       {Object.entries(assessment.star_method_analysis).map(([stage, text]) => (
-                        <div key={stage} className="p-4 rounded-xl border border-[#E2E8F0] space-y-1">
-                          <span className="text-[10px] font-mono text-[#B5945B] uppercase tracking-wider">
+                        <div key={stage} className="p-3.5 rounded-2xl border border-neutral-200 bg-white space-y-1 shadow-2xs">
+                          <span className="text-[9px] font-mono text-[#C9A84C] bg-[#0D0D12] px-2 py-0.5 rounded uppercase tracking-wide font-bold inline-block">
                             {stage.toUpperCase()}
                           </span>
-                          <p className="text-xs leading-relaxed text-slate-600">
-                            {text}
-                          </p>
+                          <p className="text-[11px] leading-relaxed text-[#2A2A35] mt-1">{text}</p>
                         </div>
                       ))}
                     </div>
@@ -632,16 +602,16 @@ export default function VoiceCoach() {
                 )}
 
                 {activeTab === 'strengths' && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
                     {/* Strengths */}
-                    <div className="space-y-3">
-                      <h4 className="text-xs font-mono text-green-600 uppercase tracking-wider flex items-center gap-1.5">
-                        <CheckCircle2 size={14} /> Điểm tốt nhất (Strengths)
+                    <div className="space-y-2">
+                      <h4 className="text-[10px] font-mono text-green-700 uppercase tracking-wider flex items-center gap-1.5 font-bold">
+                        <CheckCircle2 size={12} /> Điểm tốt nhất (Strengths)
                       </h4>
                       <ul className="space-y-2">
                         {assessment.best_parts.map((p, idx) => (
-                          <li key={idx} className="text-xs leading-relaxed text-slate-600 bg-green-50/40 p-3 rounded-lg border border-green-100 flex items-start gap-2">
-                            <span className="text-green-600 font-extrabold">•</span>
+                          <li key={idx} className="text-xs leading-relaxed text-[#2A2A35] bg-green-50 border border-green-200 p-3 rounded-xl flex items-start gap-2">
+                            <span className="text-green-700 font-extrabold">•</span>
                             <span>{p}</span>
                           </li>
                         ))}
@@ -649,13 +619,13 @@ export default function VoiceCoach() {
                     </div>
 
                     {/* Areas for Improvement */}
-                    <div className="space-y-3">
-                      <h4 className="text-xs font-mono text-red-500 uppercase tracking-wider flex items-center gap-1.5">
-                        <AlertCircle size={14} /> Cần cải thiện (Weaknesses)
+                    <div className="space-y-2">
+                      <h4 className="text-[10px] font-mono text-red-600 uppercase tracking-wider flex items-center gap-1.5 font-bold">
+                        <AlertCircle size={12} /> Cần cải thiện (Weaknesses)
                       </h4>
                       <ul className="space-y-2">
                         {assessment.areas_for_improvement.map((p, idx) => (
-                          <li key={idx} className="text-xs leading-relaxed text-slate-600 bg-red-50/40 p-3 rounded-lg border border-red-100 flex items-start gap-2">
+                          <li key={idx} className="text-xs leading-relaxed text-[#2A2A35] bg-red-50 border border-red-200 p-3 rounded-xl flex items-start gap-2">
                             <span className="text-red-500 font-extrabold">•</span>
                             <span>{p}</span>
                           </li>
@@ -666,103 +636,209 @@ export default function VoiceCoach() {
                 )}
 
                 {activeTab === 'rewrite' && (
-                  <div className="space-y-4">
-                    <div className="p-4 rounded-xl border border-[#E2E8F0] space-y-2 bg-white">
-                      <p className="text-xs font-mono text-[#3E54AC] uppercase tracking-wider flex items-center gap-1.5">
-                        <Sparkles size={14} /> Đề xuất trả lời tối ưu từ Executive Coach:
+                  <div className="space-y-3">
+                    <div className="p-4 rounded-[2.2rem] bg-white border border-neutral-200 space-y-2.5 shadow-2xs">
+                      <p className="text-[9px] font-mono text-[#0D0D12] uppercase tracking-wider flex items-center gap-1 font-bold">
+                        <Sparkles size={11} className="text-[#C9A84C]" /> Executive Sample
                       </p>
-                      <p className="text-sm leading-relaxed text-[#1E1E24] bg-[#F5F6F8] p-4 rounded-lg border border-slate-200 whitespace-pre-line font-serif italic">
-                        {assessment.better_version}
+                      <p className="text-xs leading-relaxed text-[#0D0D12] font-serif italic bg-[#FAF8F5] p-3 rounded-lg border border-neutral-200 whitespace-pre-line">
+                        "{assessment.better_version}"
+                      </p>
+                      <p className="text-[8px] text-[#2A2A35]/70 leading-relaxed">
+                        💡 Hãy luyện nói theo câu trả lời hoàn thiện trên để nâng cao tính thuyết phục và chuyên nghiệp trước hội đồng tuyển dụng.
                       </p>
                     </div>
                   </div>
                 )}
-
               </div>
-
-            </div>
-          ) : (
-            <div className="bg-white rounded-[2rem] border border-[#E2E8F0] p-12 text-center shadow-sm space-y-4">
-              <div className="w-16 h-16 rounded-full bg-[#F5F6F8] border border-[#E2E8F0] flex items-center justify-center mx-auto text-[#3E54AC]">
-                <Trophy size={24} />
-              </div>
-              <h3 className="font-bold text-lg">Hồ sơ phỏng vấn trống</h3>
-              <p className="text-sm text-slate-500 max-w-sm mx-auto">Chọn một câu hỏi tình huống bên trái, bật camera phỏng vấn thử hoặc gõ văn bản và bấm "Chấm Điểm".</p>
             </div>
           )}
 
-        </section>
-
-      </main>
-
-      {/* Settings Modal */}
-      {showSettings && (
-        <div className="fixed inset-0 z-50 bg-black/35 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-[2rem] border border-[#E2E8F0] p-8 max-w-md w-full shadow-2xl space-y-6">
-            <div className="flex justify-between items-center">
-              <h3 className="font-extrabold text-lg flex items-center gap-2">
-                <Settings size={20} className="text-[#3E54AC]" /> Thiết lập phỏng vấn
+          {/* C. SETTINGS PANEL */}
+          {activeView === 'settings' && (
+            <div className="absolute inset-0 px-5 py-4 flex flex-col gap-4 overflow-y-auto pb-24">
+              <h3 className="font-extrabold text-sm text-[#0D0D12] pb-2 border-b border-neutral-200 flex items-center gap-1.5 shrink-0">
+                <Settings size={16} className="text-[#0D0D12]" /> Cấu hình Coach
               </h3>
-              <button 
-                onClick={() => setShowSettings(false)}
-                className="text-xs font-mono uppercase tracking-wider text-slate-400 hover:text-black font-semibold"
+
+              <div className="space-y-4 flex-1">
+                {/* Grading Engine Selection */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[9px] font-mono text-[#0D0D12] uppercase tracking-wider font-bold">Phương thức chấm điểm (LLM)</label>
+                  <select
+                     value={engine}
+                     onChange={(e) => setEngine(e.target.value)}
+                     className="w-full bg-white border border-neutral-200 rounded-xl p-3 text-xs text-[#0D0D12] focus:outline-none focus:border-[#C9A84C]"
+                  >
+                    <option value="sandbox">Sandbox (Offline - 100% Free)</option>
+                    <option value="gemini">Google Gemini API (Direct Client)</option>
+                  </select>
+                </div>
+
+                {/* Gemini Key */}
+                {engine === 'gemini' && (
+                  <div className="flex flex-col gap-1.5 animate-in fade-in duration-200">
+                    <label className="text-[9px] font-mono text-[#0D0D12] uppercase tracking-wider font-bold">Google Gemini API Key</label>
+                    <input
+                      type="password"
+                      value={geminiKey}
+                      onChange={(e) => setGeminiKey(e.target.value)}
+                      placeholder="AIzaSy..."
+                      className="w-full bg-white border border-neutral-200 rounded-xl p-3 text-xs text-[#0D0D12] focus:outline-none focus:border-[#C9A84C]"
+                    />
+                    <p className="text-[8px] text-[#2A2A35]/70 leading-relaxed">
+                      🔑 Key được lưu trực tiếp trên localStorage trình duyệt cá nhân của bạn. Không gửi qua bất kỳ máy chủ trung gian nào. Bảo mật tuyệt đối.
+                    </p>
+                  </div>
+                )}
+
+                {/* STT Selection */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[9px] font-mono text-[#0D0D12] uppercase tracking-wider font-bold">Bộ chuyển đổi giọng nói (STT)</label>
+                  <select
+                    value={sttProvider}
+                    onChange={(e) => setSttProvider(e.target.value)}
+                    className="w-full bg-white border border-neutral-200 rounded-xl p-3 text-xs text-[#0D0D12] focus:outline-none focus:border-[#C9A84C]"
+                  >
+                    <option value="browser">Browser Web Speech API (NATIVE - Khuyên dùng)</option>
+                    <option value="mechanical">Audio cơ học (Sandbox simulator)</option>
+                  </select>
+                </div>
+              </div>
+
+              <button
+                onClick={saveSettings}
+                className="w-full h-11 rounded-xl bg-[#0D0D12] hover:bg-black text-[#C9A84C] font-bold text-xs transition-all mt-auto shrink-0 shadow-sm cursor-pointer"
               >
-                Đóng
+                Lưu cấu hình
               </button>
             </div>
+          )}
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-mono text-[#3E54AC] uppercase tracking-wider mb-2">Động cơ AI chấm điểm</label>
-                <select
-                  value={engine}
-                  onChange={(e) => setEngine(e.target.value)}
-                  className="w-full bg-[#F5F6F8] border border-[#E2E8F0] rounded-xl p-3 text-sm focus:outline-none focus:border-[#3E54AC]"
+        </div>
+
+        {/* Global Loading Spinner Splash Overlay */}
+        {isLoading && (
+          <div className="absolute inset-0 bg-[#FAF8F5]/90 backdrop-blur-xs flex flex-col justify-center items-center gap-4 z-50 animate-in fade-in duration-300">
+            <RefreshCw className="animate-spin text-[#0D0D12]" size={36} />
+            <div className="text-center space-y-1">
+              <h3 className="font-extrabold text-sm text-[#0D0D12]">AI Coach đang phân tích...</h3>
+              <p className="text-[10px] text-[#2A2A35]/70 max-w-[240px] leading-relaxed">Đang đối chiếu cấu trúc câu trả lời STAR và xếp hạng mức độ sẵn sàng tuyển dụng.</p>
+            </div>
+          </div>
+        )}
+
+        {/* Bottom Sheets (Slide-up Topic Selector) */}
+        {showTopicDrawer && (
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-xs z-40 animate-in fade-in duration-200">
+            <div className="absolute bottom-0 left-0 right-0 bg-[#0D0D12] text-[#FAF8F5] rounded-t-[2.2rem] p-6 shadow-2xl border-t border-[#C9A84C]/25 flex flex-col gap-4 max-h-[82%] overflow-y-auto animate-in slide-in-from-bottom duration-300">
+              <div className="flex justify-between items-center pb-2 border-b border-white/10 shrink-0">
+                <h3 className="font-extrabold text-sm text-white flex items-center gap-1.5">
+                  <BarChart2 size={16} className="text-[#C9A84C]" /> Chọn câu hỏi phỏng vấn
+                </h3>
+                <button 
+                  onClick={() => setShowTopicDrawer(false)}
+                  className="text-xs font-bold text-[#C9A84C] cursor-pointer"
                 >
-                  <option value="sandbox">Sandbox (Mô phỏng tại chỗ - Khuyên dùng)</option>
-                  <option value="gemini">Google Gemini API (Direct Browser)</option>
-                </select>
+                  Đóng
+                </button>
               </div>
 
-              {engine === 'gemini' && (
-                <div>
-                  <label className="block text-xs font-mono text-[#3E54AC] uppercase tracking-wider mb-2">Google Gemini API Key</label>
-                  <input
-                    type="password"
-                    value={geminiKey}
-                    onChange={(e) => setGeminiKey(e.target.value)}
-                    placeholder="AIzaSy..."
-                    className="w-full bg-[#F5F6F8] border border-[#E2E8F0] rounded-xl p-3 text-sm focus:outline-none focus:border-[#3E54AC]"
+              <div className="space-y-2.5 overflow-y-auto pr-1">
+                {INTERVIEW_QUESTIONS.map((q) => (
+                  <button
+                    key={q.id}
+                    onClick={() => {
+                      setActiveQuestion(q);
+                      setIsUsingCustom(false);
+                      setTranscript('');
+                      setAssessment(null);
+                      setShowTopicDrawer(false);
+                    }}
+                    className={`w-full text-left p-3.5 rounded-[1.4rem] border text-xs transition-all cursor-pointer ${
+                      activeQuestion.id === q.id && !isUsingCustom
+                        ? 'border-[#C9A84C] bg-white/5 text-[#FAF8F5]'
+                        : 'border-white/5 hover:border-white/15 bg-white/5'
+                    }`}
+                  >
+                    <p className="font-bold text-[#C9A84C] mb-0.5">{q.category}</p>
+                    <p className="text-[10px] text-neutral-400 line-clamp-2 leading-relaxed">{q.question}</p>
+                  </button>
+                ))}
+
+                <button
+                  onClick={() => {
+                    setIsUsingCustom(true);
+                    setTranscript('');
+                    setAssessment(null);
+                    setShowTopicDrawer(false);
+                  }}
+                  className={`w-full text-left p-3.5 rounded-[1.4rem] border text-xs transition-all cursor-pointer ${
+                    isUsingCustom
+                      ? 'border-[#C9A84C] bg-white/5 text-[#FAF8F5]'
+                      : 'border-white/5 hover:border-white/15 bg-white/5'
+                  }`}
+                >
+                  <p className="font-bold text-[#C9A84C] mb-0.5">Câu hỏi tự do</p>
+                  <p className="text-[10px] text-neutral-400">Tự điền câu hỏi phỏng vấn của riêng bạn từ nhà tuyển dụng.</p>
+                </button>
+              </div>
+
+              {isUsingCustom && (
+                <div className="pt-2 border-t border-white/10 flex flex-col gap-2 shrink-0 animate-in fade-in duration-200">
+                  <label className="text-[9px] font-mono text-[#C9A84C] uppercase tracking-wider font-bold">Nội dung câu hỏi phỏng vấn tự do</label>
+                  <textarea
+                    value={customQuestion}
+                    onChange={(e) => setCustomQuestion(e.target.value)}
+                    placeholder="Nhập câu hỏi tại đây..."
+                    className="w-full text-xs bg-white/5 border border-white/15 rounded-xl p-3 text-white focus:outline-none focus:border-[#C9A84C] resize-none h-16"
                   />
-                  <p className="text-[10px] text-slate-400 mt-1.5 leading-relaxed">
-                    🔑 Key được lưu tại LocalStorage thiết bị cá nhân của bạn. Hoàn toàn bảo mật.
-                  </p>
                 </div>
               )}
-
-              <div>
-                <label className="block text-xs font-mono text-[#3E54AC] uppercase tracking-wider mb-2">Bộ chuyển STT giọng nói</label>
-                <select
-                  value={sttProvider}
-                  onChange={(e) => setSttProvider(e.target.value)}
-                  className="w-full bg-[#F5F6F8] border border-[#E2E8F0] rounded-xl p-3 text-sm focus:outline-none focus:border-[#3E54AC]"
-                >
-                  <option value="browser">Browser Speech Recognition (NATIVE tiếng Việt)</option>
-                  <option value="mechanical">Sandbox (Audio simulator)</option>
-                </select>
-              </div>
             </div>
-
-            <button
-              onClick={saveSettings}
-              className="w-full h-12 rounded-xl bg-[#3E54AC] text-white font-bold text-sm hover:bg-[#2C3E8A] transition-colors"
-            >
-              Lưu thiết lập
-            </button>
           </div>
-        </div>
-      )}
+        )}
 
+        {/* Global Bottom Navigation Pill Bar */}
+        <div className="absolute bottom-0 left-0 right-0 h-16 bg-white/85 backdrop-blur-md border-t border-neutral-200 flex items-center justify-around px-6 z-30 pb-2 shrink-0 select-none">
+          <button 
+            onClick={() => setActiveView('practice')}
+            className={`flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+              activeView === 'practice' ? 'text-[#C9A84C] scale-105' : 'text-[#2A2A35]/60 hover:text-[#0D0D12]'
+            }`}
+          >
+            <Mic size={20} className={activeView === 'practice' ? 'stroke-[2.5px]' : ''} />
+            <span className="text-[9px] font-bold tracking-wide">Luyện tập</span>
+          </button>
+          
+          <button 
+            onClick={() => {
+              if (assessment) {
+                setActiveView('report');
+              } else {
+                setStatusMsg('Hãy trả lời và bấm Chấm Điểm để xem kết quả đánh giá STAR!');
+              }
+            }}
+            className={`flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+              activeView === 'report' ? 'text-[#C9A84C] scale-105' : 'text-[#2A2A35]/60 hover:text-[#0D0D12]'
+            } ${!assessment ? 'opacity-40 cursor-not-allowed' : ''}`}
+          >
+            <Award size={20} className={activeView === 'report' ? 'stroke-[2.5px]' : ''} />
+            <span className="text-[9px] font-bold tracking-wide">Đánh giá AI</span>
+          </button>
+
+          <button 
+            onClick={() => setActiveView('settings')}
+            className={`flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+              activeView === 'settings' ? 'text-[#C9A84C] scale-105' : 'text-[#2A2A35]/60 hover:text-[#0D0D12]'
+            }`}
+          >
+            <Settings size={20} className={activeView === 'settings' ? 'stroke-[2.5px]' : ''} />
+            <span className="text-[9px] font-bold tracking-wide">Cấu hình</span>
+          </button>
+        </div>
+
+      </div>
     </div>
   );
 }
