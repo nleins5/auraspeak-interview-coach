@@ -1,33 +1,27 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
 node_modules
-# Keep environment variables out of version control
+dist
+dist-ssr
+*.local
 .env
 .env.*
-!.env.example
-env_for_boss.txt
-*.log
-__pycache__/
-*.pyc
-ui/dist/
-venv/
-.venv/
-env/
-.claude/
-.vercel/
 
-/generated/prisma
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 .vercel
-.env*.local
-
-logs.txt
-silent.wav
-speech.aiff
-test.wav
-test_db.py
-test_fastapi_exception.py
-test_groq.py
-test_real_stt.py
-test_stt.py
-update_env.sh
-*.wav
-*.aiff
-

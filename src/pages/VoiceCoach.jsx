@@ -15,10 +15,6 @@ const INTERVIEW_QUESTIONS = [
 ];
 
 export default function VoiceCoach() {
-  const [engine, setEngine] = useState(() => {
-    const saved = localStorage.getItem('int_coach_engine');
-    return saved && saved !== 'undefined' ? saved : 'gemini';
-  });
   const [geminiKey, setGeminiKey] = useState(() => {
     const saved = localStorage.getItem('int_coach_gemini_key');
     if (saved && saved.trim() !== '') return saved;
@@ -177,7 +173,6 @@ export default function VoiceCoach() {
 
   // Save Settings
   const saveSettings = () => {
-    localStorage.setItem('int_coach_engine', engine);
     localStorage.setItem('int_coach_gemini_key', geminiKey);
     localStorage.setItem('int_coach_stt', sttProvider);
     setStatusMsg('Cấu hình phỏng vấn đã được lưu.');
@@ -307,129 +302,47 @@ export default function VoiceCoach() {
     }
   };
 
-  // Local Sandbox Grading for Interview
-  const generateSandboxReport = (text) => {
-    setIsLoading(true);
-    setStatusMsg('Đang phân tích cấu trúc STAR & Pacing câu trả lời...');
-    
-    setTimeout(() => {
-      const wordCount = text.split(/\s+/).filter(Boolean).length;
-      const fillerWords = (text.match(/\b(thì|là|mà|như là|kiểu như|kiểu|với lại|à|ừm)\b/ig) || []).length;
-      const pacingWpm = recordingTime > 0 ? Math.round((wordCount / recordingTime) * 60) : 125;
-
-      let score = 75;
-      if (wordCount > 30) score += 5;
-      if (wordCount > 60) score += 5;
-      if (fillerWords < 3) score += 5;
-      if (pacingWpm >= 110 && pacingWpm <= 145) score += 5;
-      score = Math.min(95, Math.max(50, score));
-
-      let readiness = "Cần Cải Thiện";
-      if (score >= 85) readiness = "Sẵn Sàng Xuất Sắc";
-      else if (score >= 75) readiness = "Sẵn Sàng";
-
-      setAssessment({
-        overall_score: score,
-        estimated_readiness: readiness,
-        brutally_honest_summary: `Câu trả lời phỏng vấn thử của bạn có độ dài ${wordCount} từ. Trả lời khá tự tin, tuy nhiên nên tập trung giải thích rõ ràng hơn phần Kết quả (Result) thay vì mô tả quá sâu vào Tình huống (Situation). Nhịp nói đạt ${pacingWpm} WPM rất chuẩn mực.`,
-        star_method_analysis: {
-          situation: "Bạn nêu được bối cảnh xung đột hoặc khó khăn ban đầu tương đối ổn thỏa.",
-          task: "Nhiệm vụ và vai trò chịu trách nhiệm của cá nhân được phác thảo ở mức chấp nhận được.",
-          action: "Các hành động cụ thể để xử lý vấn đề được liệt kê rõ, tuy nhiên cần làm nổi bật vai trò lãnh đạo hoặc chuyên môn cá nhân của bạn.",
-          result: "Phần kết quả chưa thực sự rõ ràng về mặt số liệu (ví dụ: hiệu suất tăng bao nhiêu %, tiết kiệm được bao nhiêu thời gian)."
-        },
-        best_parts: [
-          "Bố cục câu trả lời mạch lạc theo trình tự thời gian.",
-          "Phong thái nói trôi chảy, nhịp độ nói vừa vặn, không quá vội vã."
-        ],
-        areas_for_improvement: [
-          `Bạn lặp lại từ ngập ngừng '${fillerWords}' lần. Cố gắng sử dụng các cụm từ nối chuyên nghiệp hơn như 'Do đó', 'Bên cạnh đó'.`,
-          "Cần bổ sung số liệu cụ thể làm minh chứng cho phần kết quả (Result) trong cấu trúc STAR."
-        ],
-        better_version: "Để tôi đề xuất một cách trả lời mẫu hoàn hảo:\n\"Trong dự án X trước đây, tôi chịu trách nhiệm chính về giải pháp đồng bộ dữ liệu. Khi phát sinh mâu thuẫn về kiến trúc hệ thống giữa hai bên, tôi đã chủ động tổ chức một buổi review kỹ thuật khách quan để so sánh hiệu năng. Kết quả là chúng tôi đã thống nhất được phương án tối ưu nhất, giúp đẩy nhanh tiến độ dự án thêm 15% so với kế hoạch ban đầu.\""
-      });
-      setIsLoading(false);
-      setStatusMsg('Đã hoàn tất chấm điểm phỏng vấn.');
-      setActiveView('report');
-    }, 1500);
-  };
-
-  // Call Gemini directly for Interview
+  // Call AI Coaching API via Unified Router AI Endpoint for Interview
   const analyzeWithGemini = async (textToAnalyze) => {
-    if (!geminiKey) {
-      setStatusMsg('Thiếu Gemini API Key trong phần Cài Đặt. Đang chuyển hướng...');
-      setActiveView('settings');
-      return;
-    }
-    
     setIsLoading(true);
-    setStatusMsg('Kết nối trực tiếp tới Google Gemini để phân tích STAR...');
-
-    const systemInstruction = `
-      You are a world-class IT and Corporate Recruiter and Executive Interview Coach.
-      Analyze the user's verbal response to the interview question.
-      You MUST evaluate and respond ENTIRELY IN VIETNAMESE. All text fields in the JSON response MUST be written in highly professional, persuasive, and grammatically flawless Vietnamese. Under no circumstances should you output English or any other language except when quoting the candidate's exact words.
-      
-      Structure your analysis based on the STAR method (Situation, Task, Action, Result).
-      Provide your strict assessment in raw JSON format strictly matching this structure:
-      {
-        "overall_score": 85,
-        "estimated_readiness": "Sẵn Sàng / Cần Luyện Tập / Chưa Sẵn Sàng",
-        "brutally_honest_summary": "Tóm tắt phản hồi phỏng vấn cực kỳ thẳng thắn và chi tiết bằng tiếng Việt...",
-        "star_method_analysis": {
-          "situation": "Phân tích và đánh giá chi tiết phần Tình huống (Situation) bằng tiếng Việt...",
-          "task": "Phân tích và đánh giá chi tiết phần Nhiệm vụ (Task) bằng tiếng Việt...",
-          "action": "Phân tích và đánh giá chi tiết phần Hành động (Action) bằng tiếng Việt...",
-          "result": "Phân tích và đánh giá chi tiết phần Kết quả (Result) bằng tiếng Việt..."
-        },
-        "best_parts": [
-          "Điểm mạnh và điểm tốt nhất 1 bằng tiếng Việt...",
-          "Điểm mạnh và điểm tốt nhất 2 bằng tiếng Việt..."
-        ],
-        "areas_for_improvement": [
-          "Điểm yếu và điểm cần cải thiện 1 bằng tiếng Việt...",
-          "Điểm yếu và điểm cần cải thiện 2 bằng tiếng Việt..."
-        ],
-        "better_version": "Phiên bản viết lại câu trả lời mẫu hoàn hảo và chuyên nghiệp nhất bằng tiếng Việt giúp ứng viên đạt điểm tối đa..."
-      }
-    `;
+    setStatusMsg('Đang gửi dữ liệu đến AI Coach để chấm điểm STAR...');
 
     try {
+      const baseUrl = import.meta.env.VITE_ROUTER_AI_URL || 'http://localhost:8000';
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (geminiKey.trim()) {
+        headers['Authorization'] = `Bearer ${geminiKey}`;
+      }
+
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+        `${baseUrl}/v1/chat/interview`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: headers,
           body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  { text: `${systemInstruction}\n\nInterview question: "${activeQuestion.question}"\nUser response: "${textToAnalyze}"` }
-                ]
-              }
-            ],
-            generationConfig: {
-              responseMimeType: "application/json"
-            }
+            query: `Câu hỏi phỏng vấn: "${activeQuestion.question}"\nCâu trả lời của ứng viên: "${textToAnalyze}"`,
+            task: 'interview',
+            model_override: 'gemini'
           })
         }
       );
 
       if (!response.ok) {
-        throw new Error(`Status ${response.status}`);
+        throw new Error(`AI Coach Error: Status ${response.status}`);
       }
 
       const data = await response.json();
-      const rawText = data.candidates[0].content.parts[0].text;
+      const rawText = data.answer;
       const parsed = JSON.parse(rawText.trim());
       setAssessment(parsed);
-      setStatusMsg('Đã nhận phản hồi phân tích từ Gemini.');
+      setStatusMsg('Đã nhận phản hồi phân tích từ AI Coach.');
       setActiveView('report');
     } catch (err) {
       console.error(err);
-      setStatusMsg(`Lỗi kết nối API: ${err.message || err}. Vui lòng kiểm tra lại cấu hình API Key của bạn.`);
+      setStatusMsg(`Phân tích thất bại: ${err.message || err}.`);
     } finally {
       setIsLoading(false);
     }
@@ -442,13 +355,13 @@ export default function VoiceCoach() {
       return;
     }
     
-    if (!geminiKey) {
-      setStatusMsg('Bạn cần điền Google Gemini API Key để chấm điểm. Đang chuyển hướng sang trang Cài đặt...');
+    const routerUrl = import.meta.env.VITE_ROUTER_AI_URL;
+    if (geminiKey.trim() || routerUrl) {
+      analyzeWithGemini(textToAnalyze);
+    } else {
+      setStatusMsg('Bạn cần điền Google Gemini API Key hoặc cấu hình Router URL để chấm điểm. Đang chuyển hướng sang trang Cài đặt...');
       setActiveView('settings');
-      return;
     }
-
-    analyzeWithGemini(textToAnalyze);
   };
 
   return (
