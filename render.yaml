@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: voice-function-api
+    name: interview-coach-api
     env: docker
     healthCheckPath: /health
     envVars:

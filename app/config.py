@@ -26,12 +26,12 @@ _DEFAULT_CHAIN = [s.strip().lower() for s in os.getenv(
 
 _DEFAULT_TASK_TIERS = {
     "general": ["groq", "gemini", "github", "nvidia", "deepseek", "mistral", "deepinfra", "novita"],
-    "feedback": ["groq", "gemini", "github", "deepseek", "mistral", "deepinfra", "novita"],
-    "interview": ["groq", "gemini", "github", "deepseek", "mistral", "deepinfra", "novita"],
-    "presentation": ["groq", "gemini", "github", "deepseek", "mistral", "deepinfra", "novita"],
-    "english": ["groq", "gemini", "github", "deepseek", "mistral", "deepinfra", "novita"],
-    "social": ["groq", "gemini", "github", "deepseek", "mistral", "deepinfra", "novita"],
-    "social_eq": ["groq", "gemini", "github", "deepseek", "mistral", "deepinfra", "novita"],
+    "feedback": ["gemini"],
+    "interview": ["gemini"],
+    "presentation": ["gemini"],
+    "english": ["gemini"],
+    "social": ["gemini"],
+    "social_eq": ["gemini"],
 }
 
 
