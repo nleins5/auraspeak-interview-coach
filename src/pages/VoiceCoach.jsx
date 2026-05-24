@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { 
   UserRoundCheck, Mic, Square, Settings, Video, VideoOff,
   Sparkles, ShieldCheck, Trophy, AlertCircle, CheckCircle2, 
-  ChevronRight, RefreshCw, BarChart2, MessageSquare, Clock, Award
+  ChevronRight, RefreshCw, BarChart2, MessageSquare, Clock, Award,
+  Volume2, Play, Pause, Loader2
 } from 'lucide-react';
 import gsap from 'gsap';
 
@@ -605,6 +606,13 @@ export default function VoiceCoach() {
                     <div className="p-4 rounded-2xl bg-white border border-neutral-200 text-xs leading-relaxed italic text-[#0D0D12] font-serif shadow-2xs">
                       "{assessment.brutally_honest_summary}"
                     </div>
+                    <SpeakFeedback 
+                      text={assessment.brutally_honest_summary} 
+                      voiceName="M4" 
+                      speed={1.05} 
+                      lang="en" 
+                      accentColor="#C9A84C" 
+                    />
                     
                     <div className="grid grid-cols-1 gap-2.5">
                       {Object.entries(assessment.star_method_analysis).map(([stage, text]) => {
@@ -670,6 +678,13 @@ export default function VoiceCoach() {
                       <p className="text-xs leading-relaxed text-[#0D0D12] font-serif italic bg-[#FAF8F5] p-3 rounded-lg border border-neutral-200 whitespace-pre-line">
                         "{assessment.better_version}"
                       </p>
+                      <SpeakFeedback 
+                        text={assessment.better_version} 
+                        voiceName="M4" 
+                        speed={1.05} 
+                        lang="en" 
+                        accentColor="#C9A84C" 
+                      />
                       <p className="text-[8px] text-[#2A2A35]/70 leading-relaxed">
                         💡 Hãy luyện nói theo câu trả lời hoàn thiện trên để nâng cao tính thuyết phục và chuyên nghiệp trước hội đồng tuyển dụng.
                       </p>
@@ -855,6 +870,224 @@ export default function VoiceCoach() {
         </div>
 
       </div>
+    </div>
+  );
+}
+
+function SpeakFeedback({ text, voiceName, speed = 1.05, lang = "en", accentColor = "#C9A84C" }) {
+  const [audioUrl, setAudioUrl] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isOffline, setIsOffline] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const audioRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+      }
+      if (isOffline) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, [audioUrl, isOffline]);
+
+  const handleSpeech = async () => {
+    if (isPlaying) {
+      if (isOffline) {
+        window.speechSynthesis.cancel();
+        setIsPlaying(false);
+      } else if (audioRef.current) {
+        audioRef.current.pause();
+        setIsPlaying(false);
+      }
+      return;
+    }
+
+    if (audioRef.current && !isOffline) {
+      audioRef.current.play().catch(() => {});
+      setIsPlaying(true);
+      return;
+    }
+
+    setIsLoading(true);
+    setIsOffline(false);
+
+    try {
+      const backendUrl = import.meta.env.VITE_AI_TO_VOICE_URL || 'http://localhost:8002';
+      const response = await fetch(`${backendUrl}/v1/tts/synthesize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, voice_name: voiceName, lang, speed }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Backend synthesis failed');
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      setAudioUrl(url);
+
+      const audio = new Audio(url);
+      audioRef.current = audio;
+
+      audio.addEventListener('loadedmetadata', () => {
+        setDuration(audio.duration);
+      });
+
+      audio.addEventListener('timeupdate', () => {
+        setCurrentTime(audio.currentTime);
+      });
+
+      audio.addEventListener('ended', () => {
+        setIsPlaying(false);
+        setCurrentTime(0);
+      });
+
+      setIsLoading(false);
+      setIsPlaying(true);
+      audio.play().catch(() => {
+        setIsPlaying(false);
+      });
+
+    } catch (err) {
+      console.warn("Speech synthesis backend failed, falling back to local speech synthesis:", err);
+      setIsOffline(true);
+      setIsLoading(false);
+      setIsPlaying(true);
+
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = lang === 'en' ? 'en-US' : 'vi-VN';
+      utterance.rate = speed;
+
+      const voices = window.speechSynthesis.getVoices();
+      const isFemale = voiceName && voiceName.startsWith('F');
+      const matchingVoice = voices.find(v => {
+        const nameLower = v.name.toLowerCase();
+        if (isFemale) {
+          return nameLower.includes('female') || nameLower.includes('google us english') || nameLower.includes('samantha') || nameLower.includes('zira');
+        } else {
+          return nameLower.includes('male') || nameLower.includes('google uk english male') || nameLower.includes('daniel') || nameLower.includes('david');
+        }
+      });
+      if (matchingVoice) utterance.voice = matchingVoice;
+
+      utterance.onend = () => {
+        setIsPlaying(false);
+      };
+      utterance.onerror = () => {
+        setIsPlaying(false);
+      };
+
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  const handleScrub = (e) => {
+    if (audioRef.current && !isOffline) {
+      const val = parseFloat(e.target.value);
+      audioRef.current.currentTime = val;
+      setCurrentTime(val);
+    }
+  };
+
+  const formatTime = (timeInSec) => {
+    if (isNaN(timeInSec)) return "00:00";
+    const mins = Math.floor(timeInSec / 60);
+    const secs = Math.floor(timeInSec % 60);
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div className="w-full bg-[#FAF8F5]/10 backdrop-blur-md rounded-2xl border border-white/10 p-3 flex flex-col gap-2 mt-2 transition-all">
+      <div className="flex items-center justify-between gap-3">
+        <button
+          onClick={handleSpeech}
+          disabled={isLoading}
+          style={{ '--accent-color': accentColor }}
+          className="flex items-center justify-center w-9 h-9 rounded-full bg-[var(--accent-color)] text-[#0D0D12] hover:scale-105 active:scale-95 transition-all shadow-md shrink-0 disabled:opacity-50"
+        >
+          {isLoading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : isPlaying ? (
+            <Pause className="w-4 h-4" fill="currentColor" />
+          ) : (
+            <Play className="w-4 h-4 ml-0.5" fill="currentColor" />
+          )}
+        </button>
+
+        <div className="flex-1 min-w-0 text-left">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-mono tracking-wider text-[#FAF8F5]/60 font-bold uppercase">
+              {isOffline ? 'Local Speech Synthesis' : 'AI Voice Synthesis'}
+            </span>
+            {isOffline && (
+              <span className="text-[8px] font-mono bg-[#C9A84C]/20 text-[#C9A84C] px-1.5 py-0.5 rounded font-bold uppercase animate-pulse">
+                Offline Mode
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] truncate text-[#FAF8F5]/80 mt-0.5">
+            {isPlaying ? 'Đang phát âm thanh nhận xét...' : 'Nhấp để nghe nhận xét bằng giọng nói.'}
+          </p>
+        </div>
+
+        <div className="shrink-0 flex items-center gap-1 bg-white/5 px-2 py-1 rounded-lg border border-white/5">
+          <Volume2 className="w-3.5 h-3.5 text-[#FAF8F5]/60" />
+          <span className="text-[9px] font-mono font-bold text-[#FAF8F5]/70">
+            {voiceName}
+          </span>
+        </div>
+      </div>
+
+      {(isPlaying || duration > 0) && (
+        <div className="flex items-center gap-3 mt-1 px-1 animate-in fade-in duration-200">
+          <span className="text-[9px] font-mono text-[#FAF8F5]/50 w-7 shrink-0 text-left">
+            {formatTime(currentTime)}
+          </span>
+
+          {isOffline ? (
+            <div className="flex-1 h-1.5 flex items-center gap-0.5 justify-center">
+              {[...Array(12)].map((_, i) => (
+                <span
+                  key={i}
+                  style={{
+                    backgroundColor: accentColor,
+                    animationDelay: `${i * 0.08}s`,
+                    height: isPlaying ? '100%' : '20%'
+                  }}
+                  className={`w-1 rounded-full transition-all duration-300 ${
+                    isPlaying ? 'animate-pulse' : ''
+                  }`}
+                />
+              ))}
+            </div>
+          ) : (
+            <input
+              type="range"
+              min="0"
+              max={duration || 1}
+              step="0.05"
+              value={currentTime}
+              onChange={handleScrub}
+              style={{ accentColor: accentColor }}
+              className="flex-1 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer range-xs"
+            />
+          )}
+
+          <span className="text-[9px] font-mono text-[#FAF8F5]/50 w-7 shrink-0 text-right">
+            {isOffline ? '--:--' : formatTime(duration)}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
