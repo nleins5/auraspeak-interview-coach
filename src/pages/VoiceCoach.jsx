@@ -434,8 +434,7 @@ export default function VoiceCoach() {
           headers: headers,
           body: JSON.stringify({
             query: `Câu hỏi phỏng vấn: "${activeQuestion.question}"\nCâu trả lời của ứng viên: "${textToAnalyze}"`,
-            task: 'interview',
-            model_override: 'gemini'
+            task: 'interview'
           })
         }
       );

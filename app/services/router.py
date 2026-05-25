@@ -106,7 +106,10 @@ class RouterService:
         return provider.base_url
 
     def _get_provider_model(self, provider: Provider, model_override: Optional[str] = None) -> str:
-        model = model_override or os.getenv(provider.model_env, provider.default_model)
+        if model_override and model_override not in PROVIDER_REGISTRY:
+            model = model_override
+        else:
+            model = os.getenv(provider.model_env, provider.default_model)
         # Normalize for GitHub
         if provider.key == "github" and "/" not in model:
             github_aliases = {
