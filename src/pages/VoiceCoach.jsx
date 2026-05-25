@@ -439,6 +439,8 @@ export default function VoiceCoach() {
       return;
     }
     
+    setActiveTab('star');
+    setActiveView('report');
     analyzeWithGemini(textToAnalyze);
   };
 
@@ -642,8 +644,32 @@ export default function VoiceCoach() {
             </div>
           )}
 
+          {activeView === 'report' && isLoading && (
+            <div className="absolute inset-0 px-5 py-4 flex flex-col items-center justify-center gap-4 text-center pb-24">
+              <Loader2 className="animate-spin text-[#C9A84C]" size={36} />
+              <h3 className="font-extrabold text-sm text-[#0D0D12]">AI Coach đang chấm điểm...</h3>
+              <p className="text-[11px] text-[#2A2A35]/70 max-w-[240px] leading-relaxed">
+                Đang phân tích cấu trúc STAR và tạo phản hồi phỏng vấn cho bạn.
+              </p>
+            </div>
+          )}
+
+          {activeView === 'report' && !isLoading && !assessment && (
+            <div className="absolute inset-0 px-5 py-4 flex flex-col items-center justify-center gap-4 text-center pb-24">
+              <AlertCircle className="text-[#C9A84C]" size={34} />
+              <h3 className="font-extrabold text-sm text-[#0D0D12]">Chưa có feedback</h3>
+              <p className="text-[11px] text-[#2A2A35]/70 max-w-[250px] leading-relaxed">{statusMsg}</p>
+              <button
+                onClick={() => setActiveView('practice')}
+                className="h-10 px-4 rounded-xl bg-[#0D0D12] text-[#C9A84C] text-xs font-bold"
+              >
+                Quay lại luyện tập
+              </button>
+            </div>
+          )}
+
           {/* B. REPORT PANEL */}
-          {activeView === 'report' && assessment && (
+          {activeView === 'report' && !isLoading && assessment && (
             <div className="absolute inset-0 px-5 py-4 flex flex-col gap-4 overflow-y-auto pb-24">
               
               {/* High-fidelity summary scores card */}
