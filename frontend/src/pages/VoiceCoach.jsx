@@ -421,7 +421,7 @@ export default function VoiceCoach() {
             setStatusMsg('Trình duyệt không hỗ trợ ghi âm. Hãy mở bằng Chrome hoặc Safari bản mới.');
             return;
           }
-          const { recorder, mimeType } = createAudioRecorder(stream);
+          const { recorder } = createAudioRecorder(stream);
           mediaRecorderRef.current = recorder;
           mediaRecorderRef.current.ondataavailable = (e) => {
             if (e.data.size > 0) audioChunksRef.current.push(e.data);
