@@ -73,38 +73,93 @@ def _looks_invalid_key(value: str | None) -> bool:
 
 
 # Whisper hallucination patterns (silent/noise audio produces these)
+# All entries are compared lowercase and with trailing punctuation stripped
 WHISPER_HALLUCINATIONS = {
-    "1", "1.", ".", "..", "...", "…",
-    "Thank you.", "Thanks for watching.",
-    "Thank you for watching.", "Subscribe to my channel.",
-    "Đây là câu nói tiếng Việt.",
-    "Cảm ơn các bạn đã xem.",
-    "Hẹn gặp lại.",
-    "you", "You",
-    "Hãy subscribe cho kênh",
-    "Đăng ký kênh",
-    "La La La School",
-    "Chào các bạn",
+    "1", "1.", "", ".", "..", "...", "…",
+    "thank you", "thanks for watching", "thank you for watching", "subscribe to my channel",
+    "đây là câu nói tiếng việt", "cảm ơn các bạn đã xem", "hẹn gặp lại", "you",
+    "hãy subscribe cho kênh", "đăng ký kênh", "la la la school", "chào các bạn",
+    "cám ơn các bạn đã xem", "cảm ơn bạn đã xem", "cám ơn bạn đã xem",
+    "cảm ơn các bạn đã theo dõi", "cảm ơn đã xem", "cám ơn đã xem", "cảm ơn", "cám ơn",
+    "thanks for watching!", "thank you for watching!", "please subscribe", "please subscribe!",
+    "subscribe to my channel!", "subscribe", "subscribers", "sub", "please sub",
+    "cảm ơn các bạn đã xem video này", "cảm ơn các bạn đã xem video", "cảm ơn bạn đã xem video này",
+    "cảm ơn đã xem video này", "cám ơn các bạn đã xem video này", "cám ơn", "cảm ơn bạn", "cám ơn bạn",
+    "cảm ơn các bạn", "cám ơn các bạn", "thank you.", "thanks.",
+    "cảm ơn các bạn đã theo dõi video này", "cám ơn các bạn đã theo dõi video này",
+    "subcribe", "subscribers", "please like and subscribe", "like and subscribe",
+    "bạn học tiếng anh", "chúc các bạn một ngày tốt lành", "hẹn gặp lại các bạn",
+    "chúc các bạn", "chúc các bạn một ngày", "tiếng anh", "tiếng việt"
 }
 
 def _is_hallucination(text: str, prompt: str) -> bool:
     """Check if transcription is a known Whisper hallucination."""
     if not text:
         return True
-    stripped = text.strip().rstrip(".")
-    if stripped in WHISPER_HALLUCINATIONS or text.strip() in WHISPER_HALLUCINATIONS:
+    
+    # Normalize: lowercase, strip outer spaces and common ending punctuation
+    clean_text = text.strip().lower()
+    stripped = clean_text.rstrip(".,?!:;… ")
+    
+    # Check if exact match in predefined hallucination set
+    if stripped in WHISPER_HALLUCINATIONS or clean_text in WHISPER_HALLUCINATIONS:
         return True
-    if text.strip() == prompt.strip():
+        
+    # Check if it matches exactly the system/transcription prompt
+    clean_prompt = prompt.strip().lower()
+    if clean_text == clean_prompt or stripped == clean_prompt.rstrip(".,?!:;… "):
         return True
-    # Catch sub/channel variants dynamically
-    low = text.lower()
-    if "subscribe" in low and "kênh" in low:
-        return True
-    if "cảm ơn các bạn đã xem" in low:
-        return True
+        
+    # Catch dynamic variations of common English & Vietnamese Whisper hallucinations
+    lower_text = clean_text
+    
+    # Dynamic checks for subscribe, thanks for watching, etc.
+    hallucination_substrings = [
+        "thanks for watching",
+        "thank you for watching",
+        "thank you very much for watching",
+        "subscribe to",
+        "subscribe",
+        "please subscribe",
+        "đăng ký kênh",
+        "cảm ơn các bạn đã xem",
+        "cám ơn các bạn đã xem",
+        "cảm ơn bạn đã xem",
+        "cám ơn bạn đã xem",
+        "cảm ơn các bạn đã theo dõi",
+        "cám ơn các bạn đã theo dõi",
+        "hẹn gặp lại các bạn",
+        "la la la"
+    ]
+    for pattern in hallucination_substrings:
+        if pattern in lower_text:
+            # If the transcription contains these phrases and is relatively short, it's highly likely a hallucination
+            if len(lower_text) < len(pattern) + 15:
+                return True
+                
+    # Detect repetitive word loop pattern: "you you you", "thank you thank you", etc.
+    words = lower_text.split()
+    if len(words) >= 4:
+        # e.g., "you you you you"
+        unique_words = set(words)
+        if len(unique_words) == 1:
+            return True
+            
+        # e.g., "thank you thank you thank you"
+        if len(words) >= 6:
+            # check 2-word repetitions
+            phrases_2 = [" ".join(words[i:i+2]) for i in range(0, len(words) - 1, 2)]
+            if len(set(phrases_2)) == 1:
+                return True
+            # check 3-word repetitions
+            phrases_3 = [" ".join(words[i:i+3]) for i in range(0, len(words) - 2, 3)]
+            if len(set(phrases_3)) == 1:
+                return True
+                
     # Extremely short single-char or just punctuation
     if len(stripped) <= 1:
         return True
+        
     return False
 
 def _has_ffmpeg() -> bool:
@@ -397,23 +452,23 @@ async def _transcribe_with_openai(temp_path: str, language: str, prompt: str) ->
 
 async def _transcribe_roundrobin(
     temp_path: str,
-    language: str,
+    language: str | None,
     prompt: str,
     audio_bytes: bytes | None = None,
 ) -> tuple[str, list, float, str]:
     order = _pick_provider_order()
     print(f"[STT] Provider order for this request: {order}", file=sys.stderr)
 
-    is_webm = temp_path.endswith(".webm")
+    is_standard = temp_path.lower().endswith((".wav", ".mp3"))
 
     for provider in order:
         text = ""
         segments: list = []
         duration = 0.0
 
-        # Skip providers that don't natively support WebM if we couldn't convert it
-        if is_webm and provider in {"nvidia", "cloudflare"}:
-            print(f"[STT] Skipping {provider} because file is WebM and no ffmpeg", file=sys.stderr)
+        # Skip providers that don't natively support WebM/M4A/AAC/OGG if we couldn't convert it
+        if not is_standard and provider in {"nvidia", "cloudflare"}:
+            print(f"[STT] Skipping {provider} because file format is non-standard and no ffmpeg for WAV conversion", file=sys.stderr)
             continue
 
         try:

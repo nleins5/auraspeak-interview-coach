@@ -584,9 +584,11 @@ export default function VoiceCoach() {
                   <BarChart2 size={10} /> Bộ Câu Hỏi Phỏng Vấn
                 </div>
                 <h3 className="text-xs font-extrabold text-[#FAF8F5] mb-1">{isUsingCustom ? 'Câu hỏi tự do' : activeQuestion.category}</h3>
-                <p className="text-xs font-serif italic text-white/95 leading-relaxed">
-                  "{isUsingCustom ? (customQuestion || 'Nhập câu hỏi tự do phỏng vấn bên dưới...') : activeQuestion.question}"
-                </p>
+                <div className="max-h-[120px] overflow-y-auto pr-1 custom-scrollbar text-left scroll-smooth select-text">
+                  <p className="text-xs font-serif italic text-white/95 leading-relaxed">
+                    "{isUsingCustom ? (customQuestion || 'Nhập câu hỏi tự do phỏng vấn bên dưới...') : activeQuestion.question}"
+                  </p>
+                </div>
                 
                 <div className="flex items-center justify-between mt-3.5">
                   <button
@@ -611,7 +613,7 @@ export default function VoiceCoach() {
               </div>
 
               {/* Speech transcript output block with webcam bubble inside */}
-              <div className="bg-white rounded-[2.2rem] border border-neutral-200 p-5 shadow-2xs flex-1 flex flex-col gap-3 min-h-[140px] relative overflow-hidden">
+              <div className="bg-white rounded-[2.2rem] border border-neutral-200 p-5 shadow-2xs flex-1 flex flex-col gap-3 min-h-[260px] relative overflow-hidden">
                 <div className="text-[9px] font-mono text-[#0D0D12] uppercase tracking-wider font-bold shrink-0">Bản ghi & Camera</div>
                 
                 {/* Webcam PiP bubble */}
@@ -653,7 +655,7 @@ export default function VoiceCoach() {
                     value={textInput}
                     onChange={(e) => setTextInput(e.target.value)}
                     placeholder="Gõ trực tiếp câu trả lời của bạn tại đây để kiểm tra..."
-                    className="w-full h-16 bg-[#FAF8F5] border border-neutral-200 rounded-2xl p-3 text-xs focus:outline-none focus:border-[#0D0D12] resize-none shrink-0"
+                    className="w-full h-28 bg-[#FAF8F5] border border-neutral-200 rounded-2xl p-3 text-xs focus:outline-none focus:border-[#0D0D12] resize-y min-h-[96px] shrink-0"
                   />
                 )}
               </div>
@@ -1018,7 +1020,7 @@ export default function VoiceCoach() {
                     value={customQuestion}
                     onChange={(e) => setCustomQuestion(e.target.value)}
                     placeholder="Nhập câu hỏi tại đây..."
-                    className="w-full text-xs bg-white/5 border border-white/15 rounded-xl p-3 text-white focus:outline-none focus:border-[#C9A84C] resize-none h-16"
+                    className="w-full h-32 min-h-[96px] text-xs bg-white/5 border border-white/15 rounded-xl p-3 text-white focus:outline-none focus:border-[#C9A84C] resize-y"
                   />
                 </div>
               )}
