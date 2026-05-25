@@ -5,11 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5172",
-    "dev:backend": "DISABLE_DATABASE=1 GATEWAY_SECRET= REQUEST_TIMEOUT_S=8 MAX_RETRIES_PER_PROVIDER=0 ROUTING_MODE=chain python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview",
-    "start": "python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    "preview": "vite preview"
   },
   "dependencies": {
     "autoprefixer": "^10.5.0",

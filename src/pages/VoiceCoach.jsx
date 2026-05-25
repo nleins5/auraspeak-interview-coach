@@ -809,7 +809,7 @@ export default function VoiceCoach() {
                       text={assessment.brutally_honest_summary} 
                       voiceName="M4" 
                       speed={1.05} 
-                      lang="en" 
+                      lang="vi" 
                       accentColor="#C9A84C" 
                     />
                     
@@ -881,7 +881,7 @@ export default function VoiceCoach() {
                         text={assessment.better_version} 
                         voiceName="M4" 
                         speed={1.05} 
-                        lang="en" 
+                        lang="vi" 
                         accentColor="#C9A84C" 
                       />
                       <p className="text-[8px] text-[#2A2A35]/70 leading-relaxed">
