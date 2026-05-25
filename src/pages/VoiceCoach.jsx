@@ -413,6 +413,58 @@ export default function VoiceCoach() {
     }
   };
 
+  const parseAIJsonResponse = (rawText) => {
+    const text = String(rawText || '').trim();
+    try {
+      return JSON.parse(text);
+    } catch {
+      const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+      const candidate = jsonMatch?.[1] || text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1);
+      return JSON.parse(candidate);
+    }
+  };
+
+  const toList = (value) => {
+    if (!value) return [];
+    return Array.isArray(value) ? value.filter(Boolean) : [String(value)];
+  };
+
+  const categoryText = (category, fallback = 'AI chưa trả đủ dữ liệu cho mục này.') => {
+    if (!category) return fallback;
+    return [
+      ...toList(category.feedback),
+      ...toList(category.strengths).map(item => `Điểm mạnh: ${item}`),
+      ...toList(category.weaknesses).map(item => `Cần cải thiện: ${item}`),
+    ].join(' ') || fallback;
+  };
+
+  const normalizeInterviewAssessment = (raw) => {
+    const categories = raw.categories && typeof raw.categories === 'object' ? raw.categories : {};
+    const categoryValues = Object.values(categories);
+    const strengths = categoryValues.flatMap(item => toList(item?.strengths));
+    const weaknesses = categoryValues.flatMap(item => toList(item?.weaknesses));
+    const feedback = categoryValues.flatMap(item => toList(item?.feedback));
+    const improvements = toList(raw.top_5_improvements).length
+      ? toList(raw.top_5_improvements)
+      : [...weaknesses, ...feedback].slice(0, 5);
+
+    return {
+      ...raw,
+      overall_score: raw.overall_score ?? raw.score ?? 'N/A',
+      estimated_readiness: raw.estimated_readiness || raw.hiring_recommendation || 'Đã có đánh giá',
+      brutally_honest_summary: raw.brutally_honest_summary || raw.summary || 'AI đã chấm xong nhưng chưa trả nhận xét tổng quan.',
+      star_method_analysis: raw.star_method_analysis || {
+        situation: categoryText(categories.content_quality, 'Cần mở bối cảnh rõ hơn để người phỏng vấn hiểu tình huống.'),
+        task: categoryText(categories.job_fit || categories.behavioral_competencies, 'Cần nói rõ vai trò, trách nhiệm và mục tiêu của bạn.'),
+        action: categoryText(categories.communication_skills || categories.professionalism, 'Cần mô tả hành động cụ thể, có cấu trúc và chuyên nghiệp hơn.'),
+        result: categoryText(categories.confidence_presence, 'Cần chốt bằng kết quả đo được hoặc bài học cụ thể.'),
+      },
+      best_parts: toList(raw.best_parts).length ? toList(raw.best_parts) : strengths.slice(0, 5),
+      areas_for_improvement: toList(raw.areas_for_improvement).length ? toList(raw.areas_for_improvement) : improvements,
+      better_version: raw.better_version || raw.ideal_rewritten_answer || raw.natural_rewritten_answer || 'AI chưa trả bản viết lại mẫu cho câu trả lời này.',
+    };
+  };
+
   // Call AI Coaching API via Unified Router AI Endpoint for Interview
   const analyzeWithGemini = async (textToAnalyze) => {
     setIsLoading(true);
@@ -445,7 +497,7 @@ export default function VoiceCoach() {
 
       const data = await response.json();
       const rawText = data.answer;
-      const parsed = JSON.parse(rawText.trim());
+      const parsed = normalizeInterviewAssessment(parseAIJsonResponse(rawText));
       setAssessment(parsed);
       setStatusMsg('Đã nhận phản hồi phân tích từ AI Coach.');
       setActiveView('report');
