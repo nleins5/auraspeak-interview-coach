@@ -1,0 +1,13 @@
+{
+  "name": "auraspeak-interview-coach",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "dev:backend": "python3 -m uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000",
+    "build": "npm --prefix frontend ci && npm --prefix frontend run build",
+    "lint": "npm --prefix frontend run lint",
+    "start": "python3 -m uvicorn app.main:app --app-dir backend --host 0.0.0.0 --port 8000"
+  }
+}

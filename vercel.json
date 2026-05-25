@@ -1,0 +1,23 @@
+{
+  "framework": null,
+  "installCommand": "echo 'install handled by buildCommand'",
+  "buildCommand": "npm run build",
+  "outputDirectory": "frontend/dist",
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60
+    }
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Permissions-Policy", "value": "microphone=(self), camera=(self)" }
+      ]
+    }
+  ],
+  "rewrites": [
+    { "source": "/v1/:path*", "destination": "/api/index" },
+    { "source": "/health", "destination": "/api/index" }
+  ]
+}
