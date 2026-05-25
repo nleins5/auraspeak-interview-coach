@@ -7,6 +7,116 @@ import {
 } from 'lucide-react';
 import gsap from 'gsap';
 
+// A lightweight browser-native 16kHz mono WAV recorder to avoid Vercel codec issues
+class WavRecorder {
+  constructor(stream) {
+    this.stream = stream;
+    this.audioContext = null;
+    this.scriptProcessor = null;
+    this.mediaStreamSource = null;
+    this.audioBuffers = [];
+    this.recordingSampleRate = 16000;
+  }
+
+  start() {
+    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const originalSampleRate = this.audioContext.sampleRate;
+    this.mediaStreamSource = this.audioContext.createMediaStreamSource(this.stream);
+    
+    // Create script processor (4096 buffer size, 1 input channel, 1 output channel)
+    this.scriptProcessor = this.audioContext.createScriptProcessor(4096, 1, 1);
+    this.audioBuffers = [];
+
+    this.scriptProcessor.onaudioprocess = (event) => {
+      const inputBuffer = event.inputBuffer.getChannelData(0); // Mono channel
+      const downsampledBuffer = this.downsample(inputBuffer, originalSampleRate, this.recordingSampleRate);
+      this.audioBuffers.push(downsampledBuffer);
+    };
+
+    this.mediaStreamSource.connect(this.scriptProcessor);
+    this.scriptProcessor.connect(this.audioContext.destination);
+  }
+
+  stop() {
+    if (this.scriptProcessor) {
+      this.scriptProcessor.disconnect();
+      this.mediaStreamSource.disconnect();
+    }
+    if (this.audioContext && this.audioContext.state !== 'closed') {
+      this.audioContext.close();
+    }
+
+    // Flatten buffers
+    const totalLength = this.audioBuffers.reduce((acc, buf) => acc + buf.length, 0);
+    const resultBuffer = new Float32Array(totalLength);
+    let offset = 0;
+    for (const buf of this.audioBuffers) {
+      resultBuffer.set(buf, offset);
+      offset += buf.length;
+    }
+
+    // Encode to WAV
+    return this.encodeWAV(resultBuffer, this.recordingSampleRate);
+  }
+
+  downsample(buffer, fromRate, toRate) {
+    if (fromRate === toRate) {
+      return new Float32Array(buffer);
+    }
+    const sampleRateRatio = fromRate / toRate;
+    const newLength = Math.round(buffer.length / sampleRateRatio);
+    const result = new Float32Array(newLength);
+    let offsetResult = 0;
+    let offsetBuffer = 0;
+    while (offsetResult < result.length) {
+      const nextOffsetBuffer = Math.round((offsetResult + 1) * sampleRateRatio);
+      let accum = 0;
+      let count = 0;
+      for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+        accum += buffer[i];
+        count++;
+      }
+      result[offsetResult] = count > 0 ? accum / count : 0;
+      offsetResult++;
+      offsetBuffer = nextOffsetBuffer;
+    }
+    return result;
+  }
+
+  encodeWAV(samples, sampleRate) {
+    const buffer = new ArrayBuffer(44 + samples.length * 2);
+    const view = new DataView(buffer);
+
+    this.writeString(view, 0, 'RIFF');
+    view.setUint32(4, 36 + samples.length * 2, true);
+    this.writeString(view, 8, 'WAVE');
+    this.writeString(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    this.writeString(view, 36, 'data');
+    view.setUint32(40, samples.length * 2, true);
+
+    let offset = 44;
+    for (let i = 0; i < samples.length; i++, offset += 2) {
+      const s = Math.max(-1, Math.min(1, samples[i]));
+      view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+    }
+
+    return new Blob([view], { type: 'audio/wav' });
+  }
+
+  writeString(view, offset, string) {
+    for (let i = 0; i < string.length; i++) {
+      view.setUint8(offset + i, string.charCodeAt(i));
+    }
+  }
+}
+
 // DANH SÁCH CÂU HỎI PHỎNG VẤN THỬ
 const INTERVIEW_QUESTIONS = [
   { id: 1, category: "Hành Vi", question: "Hãy kể về một lần bạn gặp phải xung đột khó khăn trong nhóm. Bạn đã giải quyết nó như thế nào?" },
@@ -56,6 +166,7 @@ export default function VoiceCoach() {
 
   // Recording refs
   const mediaRecorderRef = useRef(null);
+  const wavRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const recognitionRef = useRef(null);
   const timerRef = useRef(null);
@@ -222,7 +333,7 @@ export default function VoiceCoach() {
   };
 
   const stopRecorderTracks = () => {
-    const stream = mediaRecorderRef.current?.stream;
+    const stream = mediaRecorderRef.current?.stream || wavRecorderRef.current?.stream;
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
     }
@@ -240,6 +351,46 @@ export default function VoiceCoach() {
     return { recorder: new MediaRecorder(stream), mimeType: '' };
   };
 
+  const uploadAudioForTranscription = async (audioBlob, extension) => {
+    setStatusMsg('Đang tải lên câu trả lời và nhận dạng tiếng Việt (Whisper)...');
+    setIsLoading(true);
+    try {
+      const duration = ((Date.now() - recordingStartedAtRef.current) / 1000).toFixed(1);
+      const formData = new FormData();
+      formData.append('file', audioBlob, `speech.${extension}`);
+      formData.append('language', 'vi');
+      formData.append('client_duration', duration);
+      
+      const response = await fetch(`${apiBase}/v1/audio/transcriptions`, {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Lỗi nhận dạng: HTTP ${response.status}`);
+      }
+      
+      const data = await response.json();
+      if (data.error) {
+        setStatusMsg(`Nhận dạng thất bại: ${data.error}`);
+        return;
+      }
+      
+      if (data.text) {
+        setTranscript(data.text.trim());
+        setStatusMsg('Nhận dạng giọng nói đám mây thành công! Đã điền vào ô câu trả lời.');
+      } else {
+        setStatusMsg('Không nhận diện được giọng nói. Vui lòng nói to rõ hơn.');
+      }
+    } catch (err) {
+      console.error('Cloud STT Error:', err);
+      setStatusMsg(`Lỗi Cloud STT: ${err.message || err}`);
+    } finally {
+      setIsLoading(false);
+      stopRecorderTracks();
+    }
+  };
+
   // Start Interview Recording
   const startRecording = async () => {
     isRecordingRef.current = true;
@@ -249,7 +400,6 @@ export default function VoiceCoach() {
     
     if (sttProvider === 'browser' && recognitionRef.current) {
       try {
-        // CALL SYNCHRONOUSLY FIRST to guarantee Safari/iOS user interaction gesture is preserved
         recognitionRef.current.start();
         setIsRecording(true);
         setRecordingTime(0);
@@ -259,73 +409,42 @@ export default function VoiceCoach() {
         setStatusMsg('Lỗi kích hoạt micro nhận diện giọng nói Web Speech. Hãy cấp quyền Micro trong trình duyệt.');
       }
     } else {
-      // Cloud Whisper or Sandbox Simulator (uses standard MediaRecorder asynchronously)
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         setStatusMsg('Trình duyệt không hỗ trợ micro.');
         return;
       }
-      if (typeof MediaRecorder === 'undefined') {
-        setStatusMsg('Trình duyệt không hỗ trợ ghi âm. Hãy mở bằng Chrome hoặc Safari bản mới.');
-        return;
-      }
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const { recorder, mimeType } = createAudioRecorder(stream);
-        mediaRecorderRef.current = recorder;
         recordingStartedAtRef.current = Date.now();
-        mediaRecorderRef.current.ondataavailable = (e) => {
-          if (e.data.size > 0) audioChunksRef.current.push(e.data);
-        };
-        mediaRecorderRef.current.onstop = async () => {
-          if (!audioChunksRef.current.length) {
-            stopRecorderTracks();
-            setStatusMsg('Không thu được dữ liệu âm thanh. Hãy thử lại và kiểm tra quyền Micro.');
+
+        if (sttProvider === 'cloud') {
+          // Use browser-native high-compatibility mono WAV recorder
+          wavRecorderRef.current = new WavRecorder(stream);
+          wavRecorderRef.current.start();
+        } else {
+          if (typeof MediaRecorder === 'undefined') {
+            setStatusMsg('Trình duyệt không hỗ trợ ghi âm. Hãy mở bằng Chrome hoặc Safari bản mới.');
             return;
           }
-          if (sttProvider === 'cloud') {
-            setStatusMsg('Đang tải lên câu trả lời và nhận dạng tiếng Việt (Whisper)...');
-            try {
-              const recordedType = mediaRecorderRef.current?.mimeType || audioChunksRef.current[0]?.type || mimeType || 'audio/webm';
-              const audioBlob = new Blob(audioChunksRef.current, { type: recordedType });
-              const extension = getAudioExtension(recordedType);
-              const duration = ((Date.now() - recordingStartedAtRef.current) / 1000).toFixed(1);
-              const formData = new FormData();
-              formData.append('file', audioBlob, `speech.${extension}`);
-              formData.append('language', 'vi');
-              formData.append('client_duration', duration);
-              
-              const response = await fetch(`${apiBase}/v1/audio/transcriptions`, {
-                method: 'POST',
-                body: formData
-              });
-              
-              if (!response.ok) {
-                throw new Error(`Lỗi nhận dạng: HTTP ${response.status}`);
-              }
-              
-              const data = await response.json();
-              if (data.error) {
-                setStatusMsg(`Nhận dạng thất bại: ${data.error}`);
-                stopRecorderTracks();
-                return;
-              }
-              
-              if (data.text) {
-                setTranscript(data.text.trim());
-                setStatusMsg('Nhận dạng giọng nói đám mây thành công!');
-              } else {
-                setStatusMsg('Không nhận diện được giọng nói. Vui lòng nói to rõ hơn.');
-              }
-            } catch (err) {
-              console.error('Cloud STT Error:', err);
-              setStatusMsg(`Lỗi Cloud STT: ${err.message || err}`);
+          const { recorder, mimeType } = createAudioRecorder(stream);
+          mediaRecorderRef.current = recorder;
+          mediaRecorderRef.current.ondataavailable = (e) => {
+            if (e.data.size > 0) audioChunksRef.current.push(e.data);
+          };
+          mediaRecorderRef.current.onstop = async () => {
+            if (!audioChunksRef.current.length) {
+              stopRecorderTracks();
+              setStatusMsg('Không thu được dữ liệu âm thanh. Hãy thử lại và kiểm tra quyền Micro.');
+              return;
             }
-          } else {
+            const recordedType = mediaRecorderRef.current?.mimeType || audioChunksRef.current[0]?.type || mimeType || 'audio/webm';
+            const audioBlob = new Blob(audioChunksRef.current, { type: recordedType });
             setStatusMsg('Đã ghi âm xong. Chờ phân tích...');
-          }
-          stopRecorderTracks();
-        };
-        mediaRecorderRef.current.start(1000);
+            stopRecorderTracks();
+          };
+          mediaRecorderRef.current.start(1000);
+        }
+
         setIsRecording(true);
         setRecordingTime(0);
         if (sttProvider === 'cloud') {
@@ -334,14 +453,14 @@ export default function VoiceCoach() {
           setStatusMsg('Đang ghi âm (Mô phỏng Sandbox)... Hãy trả lời phỏng vấn, sau đó nhập văn bản.');
         }
       } catch (err) {
-        console.error('MediaRecorder start error:', err);
+        console.error('Recording start error:', err);
         setStatusMsg('Lỗi bắt đầu ghi âm cơ học. Hãy cấp quyền truy cập Micro.');
       }
     }
   };
 
   // Stop Recording
-  const stopRecording = () => {
+  const stopRecording = async () => {
     isRecordingRef.current = false;
     setIsRecording(false);
     
@@ -349,20 +468,27 @@ export default function VoiceCoach() {
       try {
         recognitionRef.current.stop();
       } catch {
-        // Ignore stop errors when recognition is already inactive.
+        // Ignore
       }
-    }
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      setStatusMsg('Đã kết thúc câu trả lời. Bấm "Chấm Điểm" để xem đánh giá STAR.');
+    } else if (sttProvider === 'cloud' && wavRecorderRef.current) {
+      try {
+        setStatusMsg('Ghi âm hoàn tất. Đang chuyển đổi định dạng WAV...');
+        const audioBlob = wavRecorderRef.current.stop();
+        await uploadAudioForTranscription(audioBlob, 'wav');
+      } catch (err) {
+        console.error('Failed to stop WavRecorder:', err);
+        setStatusMsg(`Lỗi mã hóa âm thanh WAV: ${err.message}`);
+        stopRecorderTracks();
+      }
+    } else if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       try {
         mediaRecorderRef.current.requestData?.();
         mediaRecorderRef.current.stop();
       } catch {
-        // Ignore stop errors when recorder tracks were already released.
+        // Ignore
       }
-    }
-    
-    if (sttProvider === 'cloud') {
-      setStatusMsg('Đang dừng ghi âm và chuẩn bị tải lên...');
+      setStatusMsg('Đã kết thúc câu trả lời. Bấm "Chấm Điểm" để xem đánh giá STAR.');
     } else {
       setStatusMsg('Đã kết thúc câu trả lời. Bấm "Chấm Điểm" để xem đánh giá STAR.');
     }
