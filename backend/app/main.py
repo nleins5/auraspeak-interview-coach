@@ -91,6 +91,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 root_path = os.path.dirname(os.path.dirname(__file__))
 ui_path = os.path.join(root_path, "dist")
 if not os.path.exists(ui_path):
+    ui_path = os.path.join(root_path, "..", "frontend", "dist")
+if not os.path.exists(ui_path):
     ui_path = os.path.join(root_path, "ui", "dist")
 if os.path.exists(ui_path):
     assets_path = os.path.join(ui_path, "assets")
